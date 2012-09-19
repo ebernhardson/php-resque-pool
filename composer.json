@@ -1,0 +1,29 @@
+{
+    "name": "bern/php-resque-pool",
+    "type": "library",
+    "description": "php-resque worker pool manager",
+    "keywords": [],
+    "homepage": "http://github.com/ebernhardson/php-resque-pool",
+    "license": "",
+    "authors": [
+        {
+            "name": "Erik Bernhardson",
+            "email": "bernhardsonerik@gmail.com"
+        },
+        {
+            "name": "Nicholas Evans",
+            "email": "nick@ekenosen.net"
+        }
+    ],
+    "require": {
+        "php": ">=5.3.0",
+        "symfony/yaml": "2.1.*",
+        "chrisboulton/php-resque": "dev-master",
+        "symfony/console": "v2.1.1"
+    },
+    "autoload": {
+        "psr-0": { "Resque\\Pool": "lib/" }
+    },
+    "target-dir": "",
+    "minimum-stability": "dev"
+}

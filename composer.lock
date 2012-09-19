@@ -1,0 +1,29 @@
+{
+    "hash": "a6523943d09cd5351fbd7451d1708389",
+    "packages": [
+        {
+            "package": "chrisboulton/php-resque",
+            "version": "dev-master",
+            "source-reference": "64cd1874edab215f911765ab0b7dd7bf4ae99a6e",
+            "commit-date": "1345632295"
+        },
+        {
+            "package": "symfony/console",
+            "version": "v2.1.1"
+        },
+        {
+            "package": "symfony/yaml",
+            "version": "2.1.x-dev",
+            "source-reference": "v2.1.0-RC2",
+            "commit-date": "1345643321"
+        }
+    ],
+    "packages-dev": null,
+    "aliases": [
+
+    ],
+    "minimum-stability": "dev",
+    "stability-flags": {
+        "chrisboulton/php-resque": 20
+    }
+}
