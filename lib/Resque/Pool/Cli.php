@@ -2,6 +2,14 @@
 
 namespace Resque\Pool;
 
+/**
+ * CLI runner for php-resque-pool
+ *
+ * @package   Resque-Pool
+ * @auther    Erik Bernhardson <bernhardsonerik@gmail.com>
+ * @copyright (c) 2012 Erik Bernhardson
+ * @license   http://www.opensource.org/licenses/mit-license.php
+ */
 class Cli
 {
     static private $optionDefs = array(
@@ -160,6 +168,6 @@ class Cli
 
     public function startPool(Configuration $config)
     {
-        Pool::run($config);
+        PoolManager::run($config);
     }
 }

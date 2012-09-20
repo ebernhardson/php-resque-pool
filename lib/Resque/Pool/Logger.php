@@ -2,6 +2,14 @@
 
 namespace Resque\Pool;
 
+/**
+ * Logger for php-resque-pool
+ *
+ * @package   Resque-Pool
+ * @auther    Erik Bernhardson <bernhardsonerik@gmail.com>
+ * @copyright (c) 2012 Erik Bernhardson
+ * @license   http://www.opensource.org/licenses/mit-license.php
+ */
 class Logger
 {
     private $appName;
@@ -29,5 +37,13 @@ class Logger
     {
         $pid = getmypid();
         echo "resque-pool-worker{$this->appName}[$pid]: $message\n";
+    }
+
+    /**
+     * This function closes and re-opens the output log
+     */
+    public function rotate()
+    {
+        // not possible in php
     }
 }

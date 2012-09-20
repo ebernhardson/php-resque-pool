@@ -1,11 +1,27 @@
 <?php
 
-namespace Resque\Pool\Test;
+namespace Resque\Pool\Tests;
 
 use Resque\Pool\Configuration;
 
-class ConfigurationTest extends \PHPUnit_Framework_TestCase
+class ConfigurationTest extends BaseTestCase
 {
+    public function testDefaultWorkerInterval()
+    {
+        putenv('INTERVAL=');
+        $config = new Configuration(null, $this->mockLogger());
+        $this->assertEquals(Configuration::DEFAULT_WORKER_INTERVAL, $config->workerInterval);
+        putenv('INTERVAL=20');
+        $config = new Configuration(null, $this->mockLogger());
+        $this->assertEquals(20, $config->workerInterval);
+    }
+
+    public function testThrowsExceptionOnInvalidInstantiation()
+    {
+        $this->setExpectedException('InvalidArgumentException');
+        $config = new Configuration(new \StdClass);
+    }
+
     public function loadingThePoolConfigurationProvider()
     {
         $simpleConfig = array('foo' => 1, 'bar' => 2, 'foo,bar' => 3, "bar,foo" => 4);
@@ -62,7 +78,7 @@ class ConfigurationTest extends \PHPUnit_Framework_TestCase
                 $test->assertEquals(0, $subject->workerCount('baz'), $msg);
             }),
             array(array(), $noEnv, function($test, $subject) {
-                $test->assertEquals(array(), $subject->queueConfig, 'given no configuration it should have no worker types');
+                $test->assertEquals(array(), $subject->queueConfig(), 'given no configuration it should have no worker types');
             }),
             array($configFile, $testEnv, function($test, $subject) {
                 $test->assertEquals(1, $subject->workerCount('foo'), "when RESQUE_ENV is set it should load the default YAML");
@@ -107,19 +123,9 @@ class ConfigurationTest extends \PHPUnit_Framework_TestCase
     {
         $before && $before();
 
-        $config = new Configuration($config);
+        $config = new Configuration($config, $this->mockLogger());
         $config->initialize();
 
         $test($this, $config);
-    }
-
-    public function assertArrayEquals($expect, $subject)
-    {
-        $this->assertInternalType('array', $expect);
-        $this->assertInternalType('array', $subject);
-        $this->assertEquals(count($expect), count($subject));
-        foreach ($expect as $item) {
-            $this->assertContains($item, $subject);
-        }
     }
 }

@@ -2,51 +2,45 @@
 
 namespace Resque\Pool;
 
-use Symfony\Component\Yaml\Yaml;
-use Symfony\Component\Yaml\Exception\ParseException;
-
+/**
+ * Worker Pool for php-resque-pool
+ *
+ * @package   Resque-Pool
+ * @auther    Erik Bernhardson <bernhardsonerik@gmail.com>
+ * @copyright (c) 2012 Erik Bernhardson
+ * @license   http://www.opensource.org/licenses/mit-license.php
+ */
 class Pool
 {
-    static private $SIG_QUEUE_MAX_SIZE = 5;
-    static private $DEFAULT_WORKER_INTERVAL = 5;
-    static private $QUEUE_SIGS = array(SIGQUIT, SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGCONT, SIGHUP, SIGWINCH);
-    static private $CHUNK_SIZE = 16384;
+    /**
+     * @param Configuration
+     */
+    private $config;
 
-    private $pipe = array();
-    private $waitingForReaper = false;
+    /**
+     * @param Logger
+     */
+    private $logger;
+
+    /**
+     * @param [queues => [pid => true]]
+     */
     private $workers = array();
-    private $sigQueue = array();
-
-    static public function run($config=null, Logger $logger = null)
-    {
-        if (!$config instanceof Configuration) {
-            $config = new Configuration($config);
-        }
-        $logger = $logger ?: new Logger($config->appName);
-        $instance = new self($config, $logger);
-
-        $instance->start()->join();
-    }
 
     public function __construct(Configuration $config, Logger $logger)
     {
-        $this->logger = $logger;
         $this->config = $config;
-        $this->config->initialize($this->logger);
-        $this->logger->procline('(initialized)');
+        $this->logger = $logger;
     }
 
-    public function start()
+    public function getConfiguration()
     {
-        $this->logger->procline('(starting)');
-        $this->initSelfPipe();
-        $this->initSigHandlers();
-        $this->maintainWorkerCount();
-        $this->logger->procline('(started)');
-        $this->logger->log("started manager");
-        $this->reportWorkerPoolPids();
+        return $this->config;
+    }
 
-        return $this;
+    public function getLogger()
+    {
+        return $this->logger;
     }
 
     public function reportWorkerPoolPids()
@@ -59,162 +53,28 @@ class Pool
         }
     }
 
-    public function join()
-    {
-        while(true) {
-            $this->reapAllWorkers();
-            if ($this->handleSignalQueue()) {
-                break;
-            }
-            if (0 === count($this->sigQueue)) {
-                $this->masterSleep();
-                $this->maintainWorkerCount();
-            }
-            $this->logger->procline(sprintf("managing [%s]", implode(' ', $this->allPids())));
-        }
-        $this->logger->procline("(shutting down)");
-        $this->logger->log('manager finished');
-    }
-
-    protected function initSelfPipe()
-    {
-        foreach ($this->pipe as $fd) {
-            fclose($fd);
-        }
-        $this->pipe = array();
-        if (false === socket_create_pair(AF_UNIX, SOCK_STREAM, 0, $this->pipe)) {
-            $msg = 'socket_create_pair failed. Reason '.socket_strerror(socket_last_error());
-            $this->logger->log($msg);
-            die($msg);
-        }
-    }
-
-    public function awakenMaster()
-    {
-        socket_write($this->pipe[0], '.', 1);
-    }
-
-    protected function initSigHandlers()
-    {
-        foreach (self::$QUEUE_SIGS as $signal) {
-            pcntl_signal($signal, array($this, 'trapDeferred'));
-        }
-        pcntl_signal(SIGCHLD, array($this, 'awakenMaster'));
-    }
-
-    public function trapDeferred($signal)
-    {
-        if ($this->waitingForReaper && in_array($signal, array(SIGINT, SIGTERM))) {
-            $this->logger->log("Recieved $signal: short circuiting QUIT waitpid");
-            throw new QuitNowException();
-        }
-        if (count($this->sigQueue) < self::$SIG_QUEUE_MAX_SIZE) {
-            $this->sigQueue[] = $signal;
-        } else {
-            $this->logger->log("Ignoring SIG$signal, queue=" . var_export($this->sigQueue, true));
-        }
-    }
-
-    protected function resetSigHandlers()
-    {
-        $noop = function() {};
-        foreach (self::$QUEUE_SIGS as $sig) {
-            pcntl_signal($sig, $noop);
-        }
-        pcntl_signal(SIGCHLD, $noop);
-    }
-
-    protected function handleSignalQueue()
-    {
-        // this will queue up signals into $this->sigQueue
-        pcntl_signal_dispatch();
-
-        // now process them
-        switch($signal = array_shift($this->sigQueue)) {
-        case SIGUSR1:
-        case SIGUSR2:
-        case SIGCONT:
-            $this->logger->log("$signal: sending to all workers");
-            $this->signalAllWorkers($signal);
-            break;
-        case SIGHUP:
-            $this->logger->log("HUP: reload config file and reload logfiles");
-            $this->config->queueConfig = array();
-            $this->config->initialize($this->logger);
-            $this->logger->log('HUP: gracefully shutdown old children (which have old logfiles open)');
-            $this->signalAllWorkers(SIGQUIT);
-            $this->logger->log('HUP: new children will inherit new logfiles');
-            $this->maintainWorkerCount();
-            break;
-        case SIGWINCH:
-            if ($this->config->handleWinch) {
-                $this->logger->log('WINCH: gracefully stopping all workers');
-                $this->config->queueConfig = array();
-                $this->maintainWorkerCount();
-            }
-            break;
-        case SIGQUIT:
-            $this->gracefulWorkerShutdownAndWait($signal);
-            return true;
-        case SIGINT:
-            $this->gracefulWorkerShutdown($signal);
-            return true;
-        case SIGTERM:
-            switch ($this->config->termBehavior) {
-            case "graceful_worker_shutdown_and_wait":
-                $this->gracefulWorkerShutdownAndWait($signal);
-                break;
-            case "graceful_worker_shutdown":
-                $this->gracefulWorkerShutdown($signal);
-                break;
-            default:
-                $this->shutdownEverythingNow($signal);
-                break;
-            }
-            return true;
-        }
-    }
-
-    protected function gracefulWorkerShutdownAndWait($signal)
+    public function gracefulWorkerShutdownAndWait($signal)
     {
         $this->logger->log("$signal: graceful shutdown, waiting for children");
         $this->signalAllWorkers(SIGQUIT);
         $this->reapAllWorkers(0); // will hang until all workers are shutdown
     }
 
-    protected function gracefulWorkerShutdown($signal)
+    public function gracefulWorkerShutdown($signal)
     {
         $this->logger->log("$signal: immediate shutdown (graceful worker shutdown)");
         $this->signalAllWorkers(SIGQUIT);
     }
 
-    protected function shutdownEverythingNow($signal)
+    public function shutdownEverythingNow($signal)
     {
         $this->logger->log("$signal: $immediate shutdown (and immediate worker shutdown)");
         $this->signalAllWorkers(SIGTERM);
     }
 
-    protected function masterSleep()
+    public function reapAllWorkers($waitpidFlags = WNOHANG)
     {
-        $read = array($this->pipe[1]);
-        $write = array();
-        $except = array();
-        // we need the @ to hide the interupted system call if a signal is received
-        $ready = @socket_select($read, $write, $except, 1); // socket_select requires references
-        if ($ready === false || $ready === 0) {
-            // on error FALSE is returned and a warning raised (this can happen if the system
-            // call is interrupted by an incoming signal)
-            return;
-        }
-        socket_set_nonblock($this->pipe[1]);
-        do {
-            $result = socket_read($this->pipe[1], self::$CHUNK_SIZE, PHP_BINARY_READ);
-        } while($result !== false && $result !== "");
-    }
-
-    protected function reapAllWorkers($waitpidFlags = WNOHANG)
-    {
-        $this->waitingForReaper = ($waitpidFlags === 0);
+        $this->config->waitingForReaper = ($waitpidFlags === 0);
 
         while(true) {
             pcntl_signal_dispatch();
@@ -243,17 +103,6 @@ class Pool
         return false;
     }
 
-    protected function deleteWorker($pid)
-    {
-        foreach (array_keys($this->workers) as $queues) {
-            if (isset($this->workers[$queues][$pid])) {
-                unset($this->workers[$queues][$pid]);
-
-                return ;
-            }
-        }
-    }
-
     public function allPids()
     {
         if (!$this->workers) {
@@ -268,14 +117,19 @@ class Pool
         return call_user_func_array('array_merge', array_map(function($x) { return array_keys($x); }, $this->workers));
     }
 
-    protected function signalAllWorkers($signal)
+    public function allKnownQueues()
+    {
+        return array_unique(array_merge($this->config->knownQueues(), array_keys($this->workers)));
+    }
+
+    public function signalAllWorkers($signal)
     {
         foreach($this->allPids() as $pid) {
             posix_kill($pid, $signal);
         }
     }
 
-    protected function maintainWorkerCount()
+    public function maintainWorkerCount()
     {
         foreach ($this->allKnownQueues() as $queues) {
             $delta = $this->workerDeltaFor($queues);
@@ -287,9 +141,15 @@ class Pool
         }
     }
 
-    public function allKnownQueues()
+    protected function deleteWorker($pid)
     {
-        return array_merge($this->config->knownQueues(), array_keys($this->workers));
+        foreach (array_keys($this->workers) as $queues) {
+            if (isset($this->workers[$queues][$pid])) {
+                unset($this->workers[$queues][$pid]);
+
+                return ;
+            }
+        }
     }
 
     protected function spawnMissingWorkersFor($queues)
@@ -325,29 +185,32 @@ class Pool
      * NOTE: the only time resque code is ever loaded is *after* this fork.
      *       this way resque(and application) code is loaded per fork and
      *       will pick up changed files.
+     * TODO: the other possibility here is to load all the resque(and possibly application)
+     *       code pre-fork so that the copy-on-write functionality can share the compiled
+     *       code between workers.  Some investigation must be done here.
      */
     protected function spawnWorker($queues)
     {
-        $pid = pcntl_fork();
-        if ($pid === -1) {
-            $msg = 'Fatal Error: pcntl_fork returned -1';
-            $this->logger->log($msg);
-            die($msg);
-        } elseif($pid === 0) {
+        $spawnWorker = $this->config->spawnWorker;
+        $pid = call_user_func($spawnWorker);
+        if($pid === 0) {
             $worker = $this->createWorker($queues);
             $this->logger->logWorker("Starting worker $worker");
             $this->logger->procline("Starting worker $worker");
-            $this->callAfterPrefork();
-            $this->resetSigHandlers();
-            $worker->work($this->config->workerInterval || self::$DEFAULT_WORKER_INTERVAL);
-            exit(0);
+            $this->callAfterPrefork($worker);
+            $worker->work($this->config->workerInterval);
+            $this->logger->logWorker("Worker returned from work: ".$this->config->workerInterval);
+
+            $endWorker = $this->config->endWorker;
+            call_user_func($endWorker);
+        } else {
+            $this->workers[$queues][$pid] = true;
         }
-        $this->workers[$queues][$pid] = true;
     }
 
-    protected function callAfterPrefork()
+    protected function callAfterPrefork($worker)
     {
-        ($callable = $this->config->afterPreFork) && $callable($this, $worker);
+        ($callable = $this->config->afterPreFork) && call_user_func($callable, $this, $worker);
     }
 
     protected function createWorker($queues)
