@@ -6,7 +6,7 @@ class Cli
 {
     static private $optionDefs = array(
         'help' => array('Show usage information', 'default' => false, 'short' => 'h'),
-        'config' => array('Alternate path to config file', 'short' => 'c', 'default' => 'resque-pool.yml'),
+        'config' => array('Alternate path to config file', 'short' => 'c'),
         'appname' => array('Alternate appname', 'short' => 'a'),
         'daemon' => array('Run as a background daemon', 'default' => false, 'short' => 'd'),
         'pidfile' => array('PID file location', 'short' => 'p'),
@@ -24,9 +24,8 @@ class Cli
             $this->daemonize();
         }
         $this->managePidfile($opts['pidfile']);
-        $this->setupEnvironment($opts);
-        $this->setPoolOptions($opts);
-        $this->startPool();
+        $config = $this->buildConfiguration($opts);
+        $this->startPool($config);
     }
 
     public function parseOptions()
@@ -52,9 +51,14 @@ class Cli
 
         foreach (array_keys($received) as $key) {
             if (strlen($key) === 1) {
-                // getopt is odd ... it returns false for received args with no option
-                $received[$shortmap[$key]] = $received[$key] === false ? true : $received[$key];
+                $received[$shortmap[$key]] = $received[$key];
                 unset($received[$key]);
+            }
+        }
+        // getopt is odd ... it returns false for received args with no options allowed
+        foreach (array_keys($received) as $key) {
+            if (false === $received[$key]) {
+                $received[$key] = true;
             }
         }
         $received += $defaults;
@@ -69,10 +73,10 @@ class Cli
 
     public function usage()
     {
-        $cmdname = $GLOBALS['argv'][0];
+        $cmdname = isset($GLOBALS['argv'][0]) ? $GLOBALS['argv'][0] : 'resque-pool';
         echo "\n"
             ."Usage:"
-            ."\t$cmdname [OPTION]..."
+            ."\t$cmdname [OPTION]...\n"
             ."\n";
         foreach (self::$optionDefs as $name => $def) {
             $def += array('default' => '', 'short' => false);
@@ -130,33 +134,32 @@ class Cli
 
     }
 
-    public function setupEnvironment(array $options)
+    public function buildConfiguration(array $options)
     {
+        $config = new Configuration;
         if ($options['appname']) {
-            Pool::appName($options['appname']);
+            $config->appName = $options['appName'];
         }
         if ($options['environment']) {
-            putenv('RESQUE_ENVIRONMENT=' . $options['environment']);
+            putenv('RESQUE_ENV=' . $options['environment']);
         }
         if ($options['config']) {
-            putenv('RESQUE_POOL_CONFIG=' . $options['config']);
+            $config->queueConfigFile = $options['config'];
         }
-    }
-
-    public function setPoolOptions(array $options)
-    {
         if ($options['daemon']) {
-            Pool::handleWinch(true);
+            $config->handleWinch(true);
         }
         if ($options['term-graceful-wait']) {
-            Pool::termBehavior('graceful_worker_shutdown_and_wait');
+            $config->termBehavior = 'graceful_worker_shutdown_and_wait';
         } elseif ($options['term-graceful']) {
-            Pool::termBehavior('term_graceful');
+            $config->termBehavior = 'term_graceful';
         }
+
+        return $config;
     }
 
-    public function startPool()
+    public function startPool(Configuration $config)
     {
-        Pool::run();
+        Pool::run($config);
     }
 }

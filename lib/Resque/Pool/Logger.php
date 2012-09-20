@@ -21,14 +21,12 @@ class Logger
 
     public function log($message)
     {
-        $app = Pool::appName();
         $pid = getmypid();
         echo "resque-pool-manager{$this->appName}[$pid]: $message\n";
     }
 
     public function logWorker($message)
     {
-        $app = Pool::appName();
         $pid = getmypid();
         echo "resque-pool-worker{$this->appName}[$pid]: $message\n";
     }

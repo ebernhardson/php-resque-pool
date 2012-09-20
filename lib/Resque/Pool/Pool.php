@@ -12,89 +12,32 @@ class Pool
     static private $QUEUE_SIGS = array(SIGQUIT, SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGCONT, SIGHUP, SIGWINCH);
     static private $CHUNK_SIZE = 16384;
 
-    static private $appName = '';
-    static private $afterPreFork;
-    static private $configFiles = array('resque-pool.yml', 'config/resque-pool.yml');
-    static private $termBehavior; // how to act when SIGTERM is received
-    static private $workerClass = '\\Resque_Worker';
-    static private $pipe = array();
-
-    static private $waitingForReaper = false;
-
-    private $configFile;
-    private $config;
-
+    private $pipe = array();
+    private $waitingForReaper = false;
     private $workers = array();
-    private $handleWinch = false;
     private $sigQueue = array();
 
-
-    static public function afterPreFork($callable = null)
+    static public function run($config=null, Logger $logger = null)
     {
-        return $callable === null ? self::$afterPreFork : (self::$afterPreFork = $callable);
-    }
-
-    static public function configFiles($configFiles = null)
-    {
-        return $configFiles === null ? self::$configFiles : (self::$configFiles = $configFiles);
-    }
-
-    static public function appName($appName = null)
-    {
-        if ($appName !== null) {
-            self::$appName = $appName;
-        } elseif (self::$appName === null) {
-            self::$appName = basename(getcwd());
+        if (!$config instanceof Configuration) {
+            $config = new Configuration($config);
         }
+        $logger = $logger ?: new Logger($config->appName);
+        $instance = new self($config, $logger);
 
-        return self::$appName;
-    }
-
-    static public function handleWinch($bool = null)
-    {
-        return $bool === null ? self::$handleWinch : (self::$handleWinch = !!$bool);
-    }
-
-    static public function termBehavior($behavior = null)
-    {
-        return $behavior === null ? self::$termBehavior : (self::$termBehavior = $behavior);
-    }
-
-    static public function workerClass($class = null)
-    {
-        return $class === null ? self::$workerClass : (self::$workerClass = $class);
-    }
-
-    static public function chooseConfigFile()
-    {
-        if ($chosen = getenv('RESQUE_POOL_CONFIG')) {
-            return $chosen;
-        }
-        foreach (self::$configFiles as $file) {
-            if (file_exists($file)) {
-                return $file;
-            }
-        }
-
-        return null;
-    }
-
-    static public function run()
-    {
-        $instance = new self(self::chooseConfigFile());
         $instance->start()->join();
     }
 
-    public function __construct($config, Logger $logger = null)
+    public function __construct(Configuration $config, Logger $logger)
     {
-        $this->logger = $logger ? $logger : new Logger;
-        $this->initConfig($config);
+        $this->logger = $logger;
+        $this->config = $config;
+        $this->config->initialize($this->logger);
         $this->logger->procline('(initialized)');
     }
 
     public function start()
     {
-        declare(ticks = 1);
         $this->logger->procline('(starting)');
         $this->initSelfPipe();
         $this->initSigHandlers();
@@ -133,61 +76,24 @@ class Pool
         $this->logger->log('manager finished');
     }
 
-    public function config($key = null)
-    {
-        if ($key === null) {
-            return $this->config;
-        }
-
-        return isset($this->config[$key]) ? $this->config[$key] : null;
-    }
-
-    protected function initConfig($config)
-    {
-        if ($config === null || is_string($config)) {
-            $this->configFile = $config;
-        } else {
-            $this->config = $config;
-        }
-        $this->loadConfig();
-    }
-
-    protected function loadConfig()
-    {
-        if ($this->configFile) {
-            $this->logger->log("Loading config file: {$this->configFile}");
-            Yaml::enablePhpParsing();
-            try {
-                $this->config = Yaml::parse($this->configFile);
-            } catch (ParseException $e) {
-                $this->logger->log('Invalid config file: ' . $e->getMessage());
-                exit(1);
-            }
-        } elseif (!$this->config) {
-            $this->config = array();
-        }
-        $environment = getenv('RESQUE_ENV');
-        if ($environment && isset($this->config[$environment])) {
-            $this->config = $this->config[$environment] + $this->config;
-        }
-        // filter out the environments
-        $this->config = array_filter($this->config, 'is_integer');
-
-        $this->logger->log("Configured queues: " . implode(", ", array_keys($this->config)));
-    }
-
     protected function initSelfPipe()
     {
-        foreach (self::$pipe as $fd) {
+        foreach ($this->pipe as $fd) {
             fclose($fd);
         }
-        self::$pipe = array();
-        if (false === socket_create_pair(AF_UNIX, SOCK_STREAM, 0, self::$pipe)) {
+        $this->pipe = array();
+        if (false === socket_create_pair(AF_UNIX, SOCK_STREAM, 0, $this->pipe)) {
             $msg = 'socket_create_pair failed. Reason '.socket_strerror(socket_last_error());
             $this->logger->log($msg);
             die($msg);
         }
     }
+
+    public function awakenMaster()
+    {
+        socket_write($this->pipe[0], '.', 1);
+    }
+
     protected function initSigHandlers()
     {
         foreach (self::$QUEUE_SIGS as $signal) {
@@ -196,14 +102,9 @@ class Pool
         pcntl_signal(SIGCHLD, array($this, 'awakenMaster'));
     }
 
-    public function awakenMaster()
-    {
-        socket_write(self::$pipe[0], '.', 1);
-    }
-
     public function trapDeferred($signal)
     {
-        if (self::$waitingForReaper && in_array($signal, array(SIGINT, SIGTERM))) {
+        if ($this->waitingForReaper && in_array($signal, array(SIGINT, SIGTERM))) {
             $this->logger->log("Recieved $signal: short circuiting QUIT waitpid");
             throw new QuitNowException();
         }
@@ -225,6 +126,10 @@ class Pool
 
     protected function handleSignalQueue()
     {
+        // this will queue up signals into $this->sigQueue
+        pcntl_signal_dispatch();
+
+        // now process them
         switch($signal = array_shift($this->sigQueue)) {
         case SIGUSR1:
         case SIGUSR2:
@@ -234,16 +139,17 @@ class Pool
             break;
         case SIGHUP:
             $this->logger->log("HUP: reload config file and reload logfiles");
-            $this->loadConfig();
+            $this->config->queueConfig = array();
+            $this->config->initialize($this->logger);
             $this->logger->log('HUP: gracefully shutdown old children (which have old logfiles open)');
             $this->signalAllWorkers(SIGQUIT);
             $this->logger->log('HUP: new children will inherit new logfiles');
             $this->maintainWorkerCount();
             break;
         case SIGWINCH:
-            if (self::$handleWinch) {
+            if ($this->config->handleWinch) {
                 $this->logger->log('WINCH: gracefully stopping all workers');
-                $this->config = array();
+                $this->config->queueConfig = array();
                 $this->maintainWorkerCount();
             }
             break;
@@ -254,7 +160,7 @@ class Pool
             $this->gracefulWorkerShutdown($signal);
             return true;
         case SIGTERM:
-            switch (self::$termBehavior) {
+            switch ($this->config->termBehavior) {
             case "graceful_worker_shutdown_and_wait":
                 $this->gracefulWorkerShutdownAndWait($signal);
                 break;
@@ -290,7 +196,7 @@ class Pool
 
     protected function masterSleep()
     {
-        $read = array(self::$pipe[1]);
+        $read = array($this->pipe[1]);
         $write = array();
         $except = array();
         // we need the @ to hide the interupted system call if a signal is received
@@ -300,17 +206,19 @@ class Pool
             // call is interrupted by an incoming signal)
             return;
         }
-        socket_set_nonblock(self::$pipe[1]);
+        socket_set_nonblock($this->pipe[1]);
         do {
-            $result = socket_read(self::$pipe[1], self::$CHUNK_SIZE, PHP_BINARY_READ);
+            $result = socket_read($this->pipe[1], self::$CHUNK_SIZE, PHP_BINARY_READ);
         } while($result !== false && $result !== "");
     }
 
     protected function reapAllWorkers($waitpidFlags = WNOHANG)
     {
-        self::$waitingForReaper = ($waitpidFlags === 0);
+        $this->waitingForReaper = ($waitpidFlags === 0);
 
         while(true) {
+            pcntl_signal_dispatch();
+
             $wpid = pcntl_waitpid(-1, $status, $waitpidFlags);
             // 0 is WNOHANG and no dead children, -1 is no children exist
             if ($wpid === 0 || $wpid === -1) {
@@ -381,7 +289,7 @@ class Pool
 
     public function allKnownQueues()
     {
-        return array_merge(array_keys($this->config), array_keys($this->workers));
+        return array_merge($this->config->knownQueues(), array_keys($this->workers));
     }
 
     protected function spawnMissingWorkersFor($queues)
@@ -402,7 +310,7 @@ class Pool
 
     protected function workerDeltaFor($queues)
     {
-        $max = isset($this->config[$queues]) ? $this->config[$queues] : 0;
+        $max = $this->config->workerCount($queues);
         $active = isset($this->workers[$queues]) ? count($this->workers[$queues]) : 0;
 
         return $max - $active;
@@ -422,14 +330,16 @@ class Pool
     {
         $pid = pcntl_fork();
         if ($pid === -1) {
-            die('could not fork');
+            $msg = 'Fatal Error: pcntl_fork returned -1';
+            $this->logger->log($msg);
+            die($msg);
         } elseif($pid === 0) {
             $worker = $this->createWorker($queues);
             $this->logger->logWorker("Starting worker $worker");
             $this->logger->procline("Starting worker $worker");
             $this->callAfterPrefork();
             $this->resetSigHandlers();
-            $worker->work(getenv('INTERVAL') || self::$DEFAULT_WORKER_INTERVAL);
+            $worker->work($this->config->workerInterval || self::$DEFAULT_WORKER_INTERVAL);
             exit(0);
         }
         $this->workers[$queues][$pid] = true;
@@ -437,16 +347,17 @@ class Pool
 
     protected function callAfterPrefork()
     {
-        ($callable = self::$afterPreFork) && $callable($this, $worker);
+        ($callable = $this->config->afterPreFork) && $callable($this, $worker);
     }
 
     protected function createWorker($queues)
     {
         $queues = explode(',', $queues);
-        $worker = new self::$workerClass($queues);
-        if (getenv('VVERBOSE')) {
+        $class = $this->config->workerClass;
+        $worker = new $class($queues);
+        if ($this->config->logLevel === Configuration::LOG_VERBOSE) {
             $worker->logLevel = \Resque_Worker::LOG_VERBOSE;
-        } elseif(getenv('LOGGING') || getenv('VERBOSE')) {
+        } elseif($this->config->logLevel === Configuration::LOG_NORMAL) {
             $worker->logLevel = \Resque_Worker::LOG_NORMAL;
         }
 

@@ -1,5 +1,5 @@
 {
-    "name": "bern/php-resque-pool",
+    "name": "ebernhardson/php-resque-pool",
     "type": "library",
     "description": "php-resque worker pool manager",
     "keywords": [],
@@ -18,7 +18,7 @@
     "require": {
         "php": ">=5.3.0",
         "symfony/yaml": "2.1.*",
-        "chrisboulton/php-resque": "dev-master",
+        "chrisboulton/php-resque": "dev-master"
     },
     "autoload": {
         "psr-0": { "Resque\\Pool": "lib/" }
