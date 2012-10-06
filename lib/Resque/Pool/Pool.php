@@ -27,20 +27,21 @@ class Pool
      */
     private $workers = array();
 
-    public function __construct(Configuration $config, Logger $logger)
+    /**
+     * @param bool
+     */
+    private $waitingForReaper = false;
+
+    public function __construct(Configuration $config)
     {
         $this->config = $config;
-        $this->logger = $logger;
+        $this->logger = $config->logger;
+        $this->platform = $config->platform;
     }
 
     public function getConfiguration()
     {
         return $this->config;
-    }
-
-    public function getLogger()
-    {
-        return $this->logger;
     }
 
     public function reportWorkerPoolPids()
@@ -53,39 +54,30 @@ class Pool
         }
     }
 
-    public function gracefulWorkerShutdownAndWait($signal)
+    public function maintainWorkerCount()
     {
-        $this->logger->log("$signal: graceful shutdown, waiting for children");
-        $this->signalAllWorkers(SIGQUIT);
-        $this->reapAllWorkers(0); // will hang until all workers are shutdown
-    }
-
-    public function gracefulWorkerShutdown($signal)
-    {
-        $this->logger->log("$signal: immediate shutdown (graceful worker shutdown)");
-        $this->signalAllWorkers(SIGQUIT);
-    }
-
-    public function shutdownEverythingNow($signal)
-    {
-        $this->logger->log("$signal: $immediate shutdown (and immediate worker shutdown)");
-        $this->signalAllWorkers(SIGTERM);
-    }
-
-    public function reapAllWorkers($waitpidFlags = WNOHANG)
-    {
-        $this->config->waitingForReaper = ($waitpidFlags === 0);
-
-        while(true) {
-            pcntl_signal_dispatch();
-
-            $wpid = pcntl_waitpid(-1, $status, $waitpidFlags);
-            // 0 is WNOHANG and no dead children, -1 is no children exist
-            if ($wpid === 0 || $wpid === -1) {
-                break;
+        foreach ($this->allKnownQueues() as $queues) {
+            $delta = $this->workerDeltaFor($queues);
+            if ($delta > 0) {
+                while($delta-- > 0) {
+                    $this->spawnWorker($queues);
+                }
+            } elseif ($delta < 0) {
+                $pids = array_slice($this->pidsFor($queues), 0, -$delta);
+                $this->platform->signalPids($pids, SIGQUIT);
             }
+        }
+    }
 
-            $exit = pcntl_wexitstatus($status);
+    public function waitingForReaper()
+    {
+        return $this->waitingForReaper;
+    }
+
+    public function reapAllWorkers($wait = false)
+    {
+        while($exited = $this->platform->nextDeadChild($wait)) {
+            list($wpid, $exit) = $exited;
             $this->logger->log("Reaped resque worker $wpid (status: $exit) queues: ". $this->workerQueues($wpid));
             $this->deleteWorker($wpid);
         }
@@ -114,7 +106,7 @@ class Pool
             $result[] = array_keys($queues);
         }
 
-        return call_user_func_array('array_merge', array_map(function($x) { return array_keys($x); }, $this->workers));
+        return call_user_func_array('array_merge', $result);
     }
 
     public function allKnownQueues()
@@ -124,48 +116,26 @@ class Pool
 
     public function signalAllWorkers($signal)
     {
-        foreach($this->allPids() as $pid) {
-            posix_kill($pid, $signal);
-        }
+        $this->platform->signalPids($this->allPids(), $signal);
     }
 
-    public function maintainWorkerCount()
+    public function gracefulWorkerShutdownAndWait($signal)
     {
-        foreach ($this->allKnownQueues() as $queues) {
-            $delta = $this->workerDeltaFor($queues);
-            if ($delta > 0) {
-                $this->spawnMissingWorkersFor($queues);
-            } elseif ($delta < 0) {
-                $this->quitExcessWorkersFor($queues);
-            }
-        }
+        $this->logger->log("$signal: graceful shutdown, waiting for children");
+        $this->signalAllWorkers(SIGQUIT);
+        $this->reapAllWorkers(true); // will hang until all workers are shutdown
     }
 
-    protected function deleteWorker($pid)
+    public function gracefulWorkerShutdown($signal)
     {
-        foreach (array_keys($this->workers) as $queues) {
-            if (isset($this->workers[$queues][$pid])) {
-                unset($this->workers[$queues][$pid]);
-
-                return ;
-            }
-        }
+        $this->logger->log("$signal: immediate shutdown (graceful worker shutdown)");
+        $this->signalAllWorkers(SIGQUIT);
     }
 
-    protected function spawnMissingWorkersFor($queues)
+    public function shutdownEverythingNow($signal)
     {
-        $delta = $this->workerDeltaFor($queues);
-        while($delta-- > 0) {
-            $this->spawnWorker($queues);
-        }
-    }
-
-    protected function quitExcessWorkersFor($queues)
-    {
-        $delta = -$this->workerDeltaFor($queues);
-        foreach(array_slice($this->pidsFor($queues), 0, $delta) as $pid) {
-            posix_kill($pid, SIGQUIT);
-        }
+        $this->logger->log("$signal: $immediate shutdown (and immediate worker shutdown)");
+        $this->signalAllWorkers(SIGTERM);
     }
 
     protected function workerDeltaFor($queues)
@@ -181,6 +151,17 @@ class Pool
         return isset($this->workers[$queues]) ? array_keys($this->workers[$queues]) : array();
     }
 
+    protected function deleteWorker($pid)
+    {
+        foreach (array_keys($this->workers) as $queues) {
+            if (isset($this->workers[$queues][$pid])) {
+                unset($this->workers[$queues][$pid]);
+
+                return ;
+            }
+        }
+    }
+
     /**
      * NOTE: the only time resque code is ever loaded is *after* this fork.
      *       this way resque(and application) code is loaded per fork and
@@ -191,18 +172,16 @@ class Pool
      */
     protected function spawnWorker($queues)
     {
-        $spawnWorker = $this->config->spawnWorker;
-        $pid = call_user_func($spawnWorker);
+        $pid = $this->platform->pcntl_fork();
         if($pid === 0) {
+            $this->platform->releaseSignals();
             $worker = $this->createWorker($queues);
             $this->logger->logWorker("Starting worker $worker");
             $this->logger->procline("Starting worker $worker");
             $this->callAfterPrefork($worker);
             $worker->work($this->config->workerInterval);
             $this->logger->logWorker("Worker returned from work: ".$this->config->workerInterval);
-
-            $endWorker = $this->config->endWorker;
-            call_user_func($endWorker);
+            $this->platform->_exit(0);
         } else {
             $this->workers[$queues][$pid] = true;
         }
@@ -210,7 +189,9 @@ class Pool
 
     protected function callAfterPrefork($worker)
     {
-        ($callable = $this->config->afterPreFork) && call_user_func($callable, $this, $worker);
+        if ($callable = $this->config->afterPreFork) {
+            call_user_func($callable, $this, $worker);
+        }
     }
 
     protected function createWorker($queues)

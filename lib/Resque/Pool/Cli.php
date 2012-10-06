@@ -139,7 +139,6 @@ class Cli
         $oldPid = trim(file_get_contents($pidfile));
 
         return posix_kill($oldPid, 0);
-
     }
 
     public function buildConfiguration(array $options)
@@ -149,7 +148,7 @@ class Cli
             $config->appName = $options['appName'];
         }
         if ($options['environment']) {
-            putenv('RESQUE_ENV=' . $options['environment']);
+            $config->environment = $options['environment'];
         }
         if ($options['config']) {
             $config->queueConfigFile = $options['config'];

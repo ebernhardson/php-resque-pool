@@ -11,10 +11,8 @@ class PoolTest extends BaseTestCase
     public function testInstantiate()
     {
         $config = new Configuration;
-        $logger = new Logger;
-        $pool = new Pool($config, $logger);
+        $pool = new Pool($config);
         $this->assertSame($config, $pool->getConfiguration());
-        $this->assertSame($logger, $pool->getLogger());
     }
 
     public function maintainWorkerCountUpwardsProvider()
@@ -45,7 +43,7 @@ class PoolTest extends BaseTestCase
 
     public function testAllKnownQueues()
     {
-        list($pool, $pids) = $this->poolForSpawn(array('foo'=>1,'bar,baz'=>3));
+        list($pool, $pids) = $this->poolForSpawn(array('foo'=>1,'bar,baz'=>3), false);
         $this->assertArrayEquals(array('foo','bar,baz'), $pool->allKnownQueues());
         $pool->getConfiguration()->resetQueues();
         $this->assertEquals(array(), $pool->allKnownQueues());
@@ -73,13 +71,14 @@ class PoolTest extends BaseTestCase
     public function testCallAfterPreFork()
     {
         $config = new Configuration(array('bang,boom'=>1));
+        $config->logger = $this->mockLogger();
         $config->workerClass = __NAMESPACE__.'\\Mock\\Worker';
-        $config->spawnWorker = function() {
-            return 0; // 0 means pretend its the
-        };
-        $config->endWorker = function() {};
+        $config->platform = $this->mockPlatform();
+        $config->platform->expects($this->once())
+            ->method('pcntl_fork')
+            ->will($this->returnValue(0)); // 0 means pretend its the child process
 
-        $pool = new Pool($config, $this->mockLogger());
+        $pool = new Pool($config);
         $called = 0;
         $test = $this;
         $config->afterPreFork = function($pool, $worker) use(&$called, $test) {
@@ -94,17 +93,27 @@ class PoolTest extends BaseTestCase
         $this->assertArrayEquals(array('bang','boom'), Mock\Worker::$instances[0]->queues);
     }
 
-    protected function poolForSpawn($queueConfig = null)
+    protected function poolForSpawn($queueConfig = null, $mockFork=true)
     {
         $config = new Configuration($queueConfig);
-        $pool = new Pool($config, $this->mockLogger());
+        $config->logger = $this->mockLogger();
+        $config->platform = $this->mockPlatform();
+        $pool = new Pool($config);
 
         $workers = array_sum($queueConfig);
         $pids = range(1,$workers);
-        $config->spawnWorker = function() use (&$pids) {
-            return array_shift($pids);
-        };
+
+        if ($mockFork) {
+            $config->platform->expects($this->exactly($workers))
+                ->method('pcntl_fork')
+                ->will(new \PHPUnit_Framework_MockObject_Stub_ConsecutiveCalls($pids));
+        }
 
         return array($pool, $pids); // NOTE: the returned $pids is a copy, not a reference like in the closure
+    }
+
+    protected function mockPlatform()
+    {
+        return $this->getMock('Resque\\Pool\\Platform');
     }
 }

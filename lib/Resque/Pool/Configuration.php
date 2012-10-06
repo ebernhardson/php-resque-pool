@@ -21,22 +21,86 @@ class Configuration
 
     const DEFAULT_WORKER_INTERVAL = 5;
 
+    /**
+     * @param callable
+     */
     public $afterPreFork;
+    /**
+     * Tag used in log output
+     *
+     * @param string
+     */
     public $appName;
+    /**
+     * Possible configuration file locations
+     *
+     * @param [string]
+     */
     public $configFiles = array('resque-pool.yml', 'config/resque-pool.yml');
+    /**
+     * Environment to use from configuration
+     */
+    public $environment = 'dev';
+    /**
+     * Reset worker counts to 0 when SIGWINCH is received
+     *
+     * @param bool
+     */
     public $handleWinch = false;
+    /**
+     * @param Logger
+     */
+    public $logger;
+    /**
+     * @param integer self::LOG_*
+     */
     public $logLevel = self::LOG_NONE;
+    /**
+     * @param Platform
+     */
+    public $platform;
+    /**
+     * Active configuration file location.  When null self::$configFiles will be tried.
+     *
+     * @param string|null
+     */
     public $queueConfigFile;
-    public $termBehavior;
+    /**
+     * @param integer
+     */
+    public $sleepTime = 60;
+    /**
+     * What to do when receiving SIGTERM
+     *
+     * @param string
+     */
+    public $termBehavior = '';
+    /**
+     * INTERNAL
+     * @param bool
+     */
     public $waitingForReaper = false;
+    /**
+     * @param string
+     */
     public $workerClass = '\\Resque_Worker';
+    /**
+     * @param integer
+     */
     public $workerInterval = self::DEFAULT_WORKER_INTERVAL;
 
-    // callbacks used to handle fork/exit under test. additionally allows
-    // PoolManager to reset the signal handlers when workers fork.
-    public $endWorker;
+    /**
+     * One design goal was for the Pool object to have no knowledge of the
+     * PoolManager.  For the manager to clear signal handlers on spawning
+     * worker we needed a callback.
+     *
+     * @param callable
+     */
     public $spawnWorker;
 
+    /**
+     * @param [string => integer]
+     */
     protected $queueConfig;
 
     /**
@@ -44,9 +108,10 @@ class Configuration
      *                                  file containing config, or null
      * @param Logger|null       $logger If not provided one will be instantiated
      */
-    public function __construct($config = null, Logger $logger = null)
+    public function __construct($config = null, Logger $logger = null, Platform $platform = null)
     {
         $this->logger = $logger ?: new Logger;
+        $this->platform = $platform ?: new Platform;
         $this->loadEnvironment();
 
         if (is_array($config)) {
@@ -127,7 +192,7 @@ class Configuration
             if (file_exists($this->queueConfigFile)) {
                 return $this->queueConfigFile;
             }
-            $this->logger->log("Chosen config file '{$this->queueConfigFile} not found.  Looking for others.");
+            $this->logger->log("Chosen config file '{$this->queueConfigFile}' not found. Looking for others.");
         }
         $this->queueConfigFile = null;
         foreach ($this->configFiles as $file) {

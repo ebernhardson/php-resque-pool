@@ -12,21 +12,22 @@ namespace Resque\Pool;
  */
 class PoolManager
 {
-    static private $SIG_QUEUE_MAX_SIZE = 5;
-    static private $QUEUE_SIGS = array(SIGQUIT, SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGCONT, SIGHUP, SIGWINCH);
     static private $CHUNK_SIZE = 16384;
+    static private $QUEUE_SIGS = array(SIGQUIT, SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGCONT, SIGHUP, SIGWINCH, SIGCHLD);
 
-    private $pipe = array();
-    private $workers = array();
+    private $config;
+    private $logger;
+    private $platform;
+    private $pool;
     private $sigQueue = array();
+    private $workers = array();
 
-    static public function run($config = null, Logger $logger = null)
+    static public function run($config = null)
     {
         if (!$config instanceof Configuration) {
             $config = new Configuration($config);
         }
-        $logger = $logger ?: new Logger($config->appName);
-        $instance = new self(new Pool($config, $logger));
+        $instance = new self(new Pool($config));
 
         $instance->start()->join();
     }
@@ -34,12 +35,11 @@ class PoolManager
     public function __construct(Pool $pool)
     {
         $this->config = $pool->getConfiguration();
-        $this->logger = $pool->getLogger();
+        $this->logger = $this->config->logger;
+        $this->platform = $this->config->platform;
         $this->pool = $pool;
 
-        $this->config->spawnWorker = array($this, 'spawnWorker');
-        $this->config->endWorker = array($this, 'endWorker');
-        $this->config->initialize($this->logger);
+        $this->config->initialize();
 
         $this->logger->procline('(initialized)');
     }
@@ -47,8 +47,7 @@ class PoolManager
     public function start()
     {
         $this->logger->procline('(starting)');
-        $this->initSelfPipe();
-        $this->initSigHandlers();
+        $this->platform->trapSignals(self::$QUEUE_SIGS);
         $this->pool->maintainWorkerCount();
         $this->logger->procline('(started)');
         $this->logger->log("started manager");
@@ -64,9 +63,9 @@ class PoolManager
             if ($this->handleSignalQueue()) {
                 break;
             }
-            if (0 === count($this->sigQueue)) {
-                $this->masterSleep();
+            if (0 === $this->platform->numSignalsPending()) {
                 $this->pool->maintainWorkerCount();
+                $this->platform->sleep($this->config->sleepTime);
             }
             $this->logger->procline(sprintf("managing [%s]", implode(' ', $this->pool->allPids())));
         }
@@ -74,82 +73,10 @@ class PoolManager
         $this->logger->log('manager finished');
     }
 
-    public function spawnWorker()
-    {
-        $pid = pcntl_fork();
-        if ($pid === -1) {
-            $msg = 'Fatal Error: pcntl_fork returned -1';
-            $this->logger->log($msg);
-
-            throw new \RuntimeException($msg);
-        }
-        if ($pid === 0) {
-            $this->resetSigHandlers();
-        }
-
-        return $pid;
-    }
-
-    public function endWorker()
-    {
-        exit(0);
-    }
-
-    protected function initSelfPipe()
-    {
-        foreach ($this->pipe as $fd) {
-            fclose($fd);
-        }
-        $this->pipe = array();
-        if (false === socket_create_pair(AF_UNIX, SOCK_STREAM, 0, $this->pipe)) {
-            $msg = 'socket_create_pair failed. Reason '.socket_strerror(socket_last_error());
-            $this->logger->log($msg);
-            throw new \RuntimeException($msg);
-        }
-    }
-
-    public function awakenMaster()
-    {
-        socket_write($this->pipe[0], '.', 1);
-    }
-
-    protected function initSigHandlers()
-    {
-        foreach (self::$QUEUE_SIGS as $signal) {
-            pcntl_signal($signal, array($this, 'trapDeferred'));
-        }
-        pcntl_signal(SIGCHLD, array($this, 'awakenMaster'));
-    }
-
-    public function trapDeferred($signal)
-    {
-        if ($this->config->waitingForReaper && in_array($signal, array(SIGINT, SIGTERM))) {
-            $this->logger->log("Recieved $signal: short circuiting QUIT waitpid");
-            throw new QuitNowException();
-        }
-        if (count($this->sigQueue) < self::$SIG_QUEUE_MAX_SIZE) {
-            $this->sigQueue[] = $signal;
-        } else {
-            $this->logger->log("Ignoring SIG$signal, queue=" . var_export($this->sigQueue, true));
-        }
-    }
-
-    protected function resetSigHandlers()
-    {
-        $noop = function() {};
-        foreach (self::$QUEUE_SIGS as $sig) {
-            pcntl_signal($sig, $noop);
-        }
-        pcntl_signal(SIGCHLD, $noop);
-    }
-
+    // @return bool Return true to
     protected function handleSignalQueue()
     {
-        // this will queue up signals into $this->sigQueue
-        pcntl_signal_dispatch();
-
-        // now process them
-        switch($signal = array_shift($this->sigQueue)) {
+        switch($signal = $this->platform->nextSignal()) {
         case SIGUSR1:
         case SIGUSR2:
         case SIGCONT:
@@ -173,6 +100,7 @@ class PoolManager
             }
             break;
         case SIGQUIT:
+            $this->platform->setQuitOnExitSignal(true);
             $this->pool->gracefulWorkerShutdownAndWait($signal);
             return true;
         case SIGINT:
@@ -192,23 +120,5 @@ class PoolManager
             }
             return true;
         }
-    }
-
-    protected function masterSleep()
-    {
-        $read = array($this->pipe[1]);
-        $write = array();
-        $except = array();
-        // we need the @ to hide the interupted system call if a signal is received
-        $ready = @socket_select($read, $write, $except, 1); // socket_select requires references
-        if ($ready === false || $ready === 0) {
-            // on error FALSE is returned and a warning raised (this can happen if the system
-            // call is interrupted by an incoming signal)
-            return;
-        }
-        socket_set_nonblock($this->pipe[1]);
-        do {
-            $result = socket_read($this->pipe[1], self::$CHUNK_SIZE, PHP_BINARY_READ);
-        } while($result !== false && $result !== "");
     }
 }
