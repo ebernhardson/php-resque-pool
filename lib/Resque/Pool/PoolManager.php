@@ -12,8 +12,8 @@ namespace Resque\Pool;
  */
 class PoolManager
 {
-    static private $CHUNK_SIZE = 16384;
-    static private $QUEUE_SIGS = array(SIGQUIT, SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGCONT, SIGHUP, SIGWINCH, SIGCHLD);
+    private static $CHUNK_SIZE = 16384;
+    private static $QUEUE_SIGS = array(SIGQUIT, SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGCONT, SIGHUP, SIGWINCH, SIGCHLD);
 
     private $config;
     private $logger;
@@ -22,7 +22,7 @@ class PoolManager
     private $sigQueue = array();
     private $workers = array();
 
-    static public function run($config = null)
+    public static function run($config = null)
     {
         if (!$config instanceof Configuration) {
             $config = new Configuration($config);
@@ -58,7 +58,7 @@ class PoolManager
 
     public function join()
     {
-        while(true) {
+        while (true) {
             $this->pool->reapAllWorkers();
             if ($this->handleSignalQueue()) {
                 break;
@@ -76,7 +76,7 @@ class PoolManager
     // @return bool Return true to
     protected function handleSignalQueue()
     {
-        switch($signal = $this->platform->nextSignal()) {
+        switch ($signal = $this->platform->nextSignal()) {
         case SIGUSR1:
         case SIGUSR2:
         case SIGCONT:
@@ -102,9 +102,11 @@ class PoolManager
         case SIGQUIT:
             $this->platform->setQuitOnExitSignal(true);
             $this->pool->gracefulWorkerShutdownAndWait($signal);
+
             return true;
         case SIGINT:
             $this->pool->gracefulWorkerShutdown($signal);
+
             return true;
         case SIGTERM:
             switch ($this->config->termBehavior) {
@@ -118,6 +120,7 @@ class PoolManager
                 $this->pool->shutdownEverythingNow($signal);
                 break;
             }
+
             return true;
         }
     }

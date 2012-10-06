@@ -2,8 +2,6 @@
 
 namespace Resque\Pool\Tests;
 
-use Resque\Pool\Configuration;
-
 abstract class BaseTestCase extends \PHPUnit_Framework_TestCase
 {
     public function assertArrayEquals($expect, $subject, $message='')

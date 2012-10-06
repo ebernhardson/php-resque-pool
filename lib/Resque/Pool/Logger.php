@@ -22,7 +22,7 @@ class Logger
 
     public function procline($string)
     {
-        if(function_exists('setproctitle')) {
+        if (function_exists('setproctitle')) {
             setproctitle("resque-pool-manager{$this->appName}: $string");
         }
     }

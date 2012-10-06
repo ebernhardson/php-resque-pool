@@ -106,7 +106,7 @@ class Configuration
     /**
      * @param array|string|null $config Either a configuration array, path to yml
      *                                  file containing config, or null
-     * @param Logger|null       $logger If not provided one will be instantiated
+     * @param Logger|null $logger If not provided one will be instantiated
      */
     public function __construct($config = null, Logger $logger = null, Platform $platform = null)
     {

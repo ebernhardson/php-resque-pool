@@ -4,7 +4,7 @@ namespace Resque\Pool\Tests\Mock;
 
 class Worker
 {
-    static public $instances = array();
+    public static $instances = array();
 
     public $queues;
     public $calledWork = 0;

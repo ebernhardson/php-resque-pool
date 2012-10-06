@@ -81,7 +81,7 @@ class PoolTest extends BaseTestCase
         $pool = new Pool($config);
         $called = 0;
         $test = $this;
-        $config->afterPreFork = function($pool, $worker) use(&$called, $test) {
+        $config->afterPreFork = function($pool, $worker) use (&$called, $test) {
             $test->assertInstanceOf('Resque\\Pool\\Pool', $pool);
             $test->assertInstanceOf(__NAMESPACE__.'\\Mock\\Worker', $worker);
             $called++;

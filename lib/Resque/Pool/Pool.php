@@ -59,7 +59,7 @@ class Pool
         foreach ($this->allKnownQueues() as $queues) {
             $delta = $this->workerDeltaFor($queues);
             if ($delta > 0) {
-                while($delta-- > 0) {
+                while ($delta-- > 0) {
                     $this->spawnWorker($queues);
                 }
             } elseif ($delta < 0) {
@@ -76,7 +76,7 @@ class Pool
 
     public function reapAllWorkers($wait = false)
     {
-        while($exited = $this->platform->nextDeadChild($wait)) {
+        while ($exited = $this->platform->nextDeadChild($wait)) {
             list($wpid, $exit) = $exited;
             $this->logger->log("Reaped resque worker $wpid (status: $exit) queues: ". $this->workerQueues($wpid));
             $this->deleteWorker($wpid);
@@ -87,7 +87,6 @@ class Pool
     {
         foreach ($this->workers as $queues => $workers) {
             if (isset($workers[$pid])) {
-
                 return $queues;
             }
         }
@@ -173,7 +172,7 @@ class Pool
     protected function spawnWorker($queues)
     {
         $pid = $this->platform->pcntl_fork();
-        if($pid === 0) {
+        if ($pid === 0) {
             $this->platform->releaseSignals();
             $worker = $this->createWorker($queues);
             $this->logger->logWorker("Starting worker $worker");
@@ -201,7 +200,7 @@ class Pool
         $worker = new $class($queues);
         if ($this->config->logLevel === Configuration::LOG_VERBOSE) {
             $worker->logLevel = \Resque_Worker::LOG_VERBOSE;
-        } elseif($this->config->logLevel === Configuration::LOG_NORMAL) {
+        } elseif ($this->config->logLevel === Configuration::LOG_NORMAL) {
             $worker->logLevel = \Resque_Worker::LOG_NORMAL;
         }
 

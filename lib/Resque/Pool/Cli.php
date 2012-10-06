@@ -12,7 +12,7 @@ namespace Resque\Pool;
  */
 class Cli
 {
-    static private $optionDefs = array(
+    private static $optionDefs = array(
         'help' => array('Show usage information', 'default' => false, 'short' => 'h'),
         'config' => array('Alternate path to config file', 'short' => 'c'),
         'appname' => array('Alternate appname', 'short' => 'a'),
@@ -122,12 +122,12 @@ class Cli
             } else {
                 unlink($pidfile);
             }
-        } elseif(!is_dir($piddir = basename($pidfile))) {
+        } elseif (!is_dir($piddir = basename($pidfile))) {
             mkdir($piddir, 0777, true);
         }
 
         file_put_contents($pidfile, getmypid(), LOCK_EX);
-        register_shutdown_function(function() use($pidfile) {
+        register_shutdown_function(function() use ($pidfile) {
             if (getmypid() === file_get_contents($pidfile)) {
                 unlink($pidfile);
             }

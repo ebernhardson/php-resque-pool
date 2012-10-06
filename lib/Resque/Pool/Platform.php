@@ -7,7 +7,7 @@ namespace Resque\Pool;
  */
 class Platform
 {
-    static private $SIG_QUEUE_MAX_SIZE = 5;
+    private static $SIG_QUEUE_MAX_SIZE = 5;
 
     // @param Logger
     protected $logger;
@@ -90,7 +90,6 @@ class Platform
 
         return count($this->sigQueue);
     }
-
 
     public function nextSignal()
     {
