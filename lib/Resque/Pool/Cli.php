@@ -101,7 +101,7 @@ class Cli
     {
         $pid = pcntl_fork();
         if ($pid === -1) {
-            throw new \Exception("Failed pcntl_fork");
+            throw new \RuntimeException("Failed pcntl_fork");
         }
         if ($pid) {
             // parent

@@ -13,7 +13,6 @@ namespace Resque\Pool;
 class Logger
 {
     private $appName;
-    private $lastStatus;
 
     public function __construct($appName = null)
     {
@@ -44,6 +43,6 @@ class Logger
      */
     public function rotate()
     {
-        // not possible in php
+        // not possible in php?
     }
 }

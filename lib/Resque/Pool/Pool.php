@@ -27,11 +27,6 @@ class Pool
      */
     private $workers = array();
 
-    /**
-     * @param bool
-     */
-    private $waitingForReaper = false;
-
     public function __construct(Configuration $config)
     {
         $this->config = $config;
@@ -67,11 +62,6 @@ class Pool
                 $this->platform->signalPids($pids, SIGQUIT);
             }
         }
-    }
-
-    public function waitingForReaper()
-    {
-        return $this->waitingForReaper;
     }
 
     public function reapAllWorkers($wait = false)
@@ -166,20 +156,23 @@ class Pool
      *       this way resque(and application) code is loaded per fork and
      *       will pick up changed files.
      * TODO: the other possibility here is to load all the resque(and possibly application)
-     *       code pre-fork so that the copy-on-write functionality can share the compiled
-     *       code between workers.  Some investigation must be done here.
+     *       code pre-fork so that the copy-on-write functionality of the linux memory model
+     *       can share the compiled code between workers.  Some investigation into the facts
+     *       would be usefull
      */
     protected function spawnWorker($queues)
     {
         $pid = $this->platform->pcntl_fork();
-        if ($pid === 0) {
+        if ($pid === -1) {
+            $this->logger->log('pcntl_fork failed');
+            $this->platform->exit(1);
+        } elseif ($pid === 0) {
             $this->platform->releaseSignals();
             $worker = $this->createWorker($queues);
             $this->logger->logWorker("Starting worker $worker");
             $this->logger->procline("Starting worker $worker");
             $this->callAfterPrefork($worker);
             $worker->work($this->config->workerInterval);
-            $this->logger->logWorker("Worker returned from work: ".$this->config->workerInterval);
             $this->platform->_exit(0);
         } else {
             $this->workers[$queues][$pid] = true;

@@ -76,11 +76,6 @@ class Configuration
      */
     public $termBehavior = '';
     /**
-     * INTERNAL
-     * @param bool
-     */
-    public $waitingForReaper = false;
-    /**
      * @param string
      */
     public $workerClass = '\\Resque_Worker';
@@ -90,29 +85,21 @@ class Configuration
     public $workerInterval = self::DEFAULT_WORKER_INTERVAL;
 
     /**
-     * One design goal was for the Pool object to have no knowledge of the
-     * PoolManager.  For the manager to clear signal handlers on spawning
-     * worker we needed a callback.
-     *
-     * @param callable
-     */
-    public $spawnWorker;
-
-    /**
      * @param [string => integer]
      */
     protected $queueConfig;
 
     /**
-     * @param array|string|null $config Either a configuration array, path to yml
-     *                                  file containing config, or null
-     * @param Logger|null $logger If not provided one will be instantiated
+     * @param array|string|null $config   Either a configuration array, path to yml
+     *                                    file containing config, or null
+     * @param Logger|null       $logger   If not provided one will be instantiated
+     * @param Platform|null     $platform If not provided one will be instantiated
      */
     public function __construct($config = null, Logger $logger = null, Platform $platform = null)
     {
-        $this->logger = $logger ?: new Logger;
-        $this->platform = $platform ?: new Platform;
         $this->loadEnvironment();
+        $this->logger = $logger ?: new Logger($this->appName);
+        $this->platform = $platform ?: new Platform;
 
         if (is_array($config)) {
             $this->queueConfig = $config;
@@ -190,7 +177,7 @@ class Configuration
     {
         if ($this->queueConfigFile) {
             if (file_exists($this->queueConfigFile)) {
-                return $this->queueConfigFile;
+                return;
             }
             $this->logger->log("Chosen config file '{$this->queueConfigFile}' not found. Looking for others.");
         }

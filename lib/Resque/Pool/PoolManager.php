@@ -73,7 +73,7 @@ class PoolManager
         $this->logger->log('manager finished');
     }
 
-    // @return bool Return true to
+    // @return bool When true the pool manager must shut down
     protected function handleSignalQueue()
     {
         switch ($signal = $this->platform->nextSignal()) {
@@ -84,9 +84,9 @@ class PoolManager
             $this->pool->signalAllWorkers($signal);
             break;
         case SIGHUP:
-            $this->logger->log("HUP: reload config file and reload logfiles");
+            $this->logger->log("HUP: reload config file");
             $this->config->resetQueues();
-            $this->config->initialize($this->logger);
+            $this->config->initialize();
             $this->logger->log('HUP: gracefully shutdown old children (which have old logfiles open)');
             $this->pool->signalAllWorkers(SIGQUIT);
             $this->logger->log('HUP: new children will inherit new logfiles');
@@ -95,7 +95,7 @@ class PoolManager
         case SIGWINCH:
             if ($this->config->handleWinch) {
                 $this->logger->log('WINCH: gracefully stopping all workers');
-                $this->config->queueConfig = array();
+                $this->config->resetQueues();
                 $this->pool->maintainWorkerCount();
             }
             break;

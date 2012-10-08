@@ -3,7 +3,14 @@
 namespace Resque\Pool;
 
 /**
- * This class exists so that the calls here can be replaced in the unit testing suite
+ * Platform specific funcionality of php-resque-pool.  Handles signals in/out
+ * along with wrapping a few standard php functions so they can be mocked in
+ * tests.
+ *
+ * @package   Resque-Pool
+ * @auther    Erik Bernhardson <bernhardsonerik@gmail.com>
+ * @copyright (c) 2012 Erik Bernhardson
+ * @license   http://www.opensource.org/licenses/mit-license.php
  */
 class Platform
 {
@@ -70,13 +77,13 @@ class Platform
         $this->trappedSignals = array();
     }
 
+    // INTERNAL: called by php signal handling
     public function trapDeferred($signal)
     {
         if (count($this->sigQueue) < self::$SIG_QUEUE_MAX_SIZE) {
             if ($this->quitOnExitSignal && in_array($signal, array(SIGINT, SIGTERM))) {
                 $this->log("Received $signal: short circuiting QUIT waitpid");
-
-                throw new QuitNowException;
+                $this->exit(1); // TODO: should this return a failed exit code?
             }
             $this->sigQueue[] = $signal;
         } else {
@@ -84,6 +91,7 @@ class Platform
         }
     }
 
+    // @return integer
     public function numSignalsPending()
     {
         pcntl_signal_dispatch();
@@ -91,6 +99,7 @@ class Platform
         return count($this->sigQueue);
     }
 
+    // @return integer|null
     public function nextSignal()
     {
         // this will queue up signals into $this->sigQueue
@@ -99,7 +108,8 @@ class Platform
         return array_shift($this->sigQueue);
     }
 
-    // @param bool $wait
+    // @param  bool            $wait When non-false and there are no dead children, wait for the next one
+    // @return [int, int]|null Returns either the pid and exit code of a dead child process, or null
     public function nextDeadChild($wait = false)
     {
         $wpid = pcntl_waitpid(-1, $status, $wait === false ? WNOHANG : 0);
