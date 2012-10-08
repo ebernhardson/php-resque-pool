@@ -12,6 +12,8 @@ namespace Resque\Pool;
  */
 class Pool
 {
+    private static $QUEUE_SIGS = array(SIGQUIT, SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGCONT, SIGHUP, SIGWINCH, SIGCHLD);
+
     /**
      * @param Configuration
      */
@@ -34,9 +36,89 @@ class Pool
         $this->platform = $config->platform;
     }
 
-    public function getConfiguration()
+    public function start()
     {
-        return $this->config;
+        $this->config->initialize();
+        $this->logger->procline('(starting)');
+        $this->platform->trapSignals(self::$QUEUE_SIGS);
+        $this->maintainWorkerCount();
+
+        $this->logger->procline('(started)');
+        $this->logger->log("started manager");
+        $this->reportWorkerPoolPids();
+    }
+
+    public function join()
+    {
+        while (true) {
+            $this->reapAllWorkers();
+            if ($this->handleSignalQueue()) {
+                break;
+            }
+            if (0 === $this->platform->numSignalsPending()) {
+                $this->maintainWorkerCount();
+                $this->platform->sleep($this->config->sleepTime);
+            }
+            $this->logger->procline(sprintf("managing [%s]", implode(' ', $this->allPids())));
+        }
+        $this->logger->procline("(shutting down)");
+        $this->logger->log("manager finished");
+    }
+
+    /**
+     * @return bool When true the pool manager must shut down
+     */
+    protected function handleSignalQueue()
+    {
+        switch ($signal = $this->platform->nextSignal()) {
+        case SIGUSR1:
+        case SIGUSR2:
+        case SIGCONT:
+            $this->logger->log("$signal: sending to all workers");
+            $this->signalAllWorkers($signal);
+            break;
+        case SIGHUP:
+            $this->logger->log("HUP: reload config file");
+            $this->config->resetQueues();
+            $this->config->initialize();
+            $this->logger->log('HUP: gracefully shutdown old children (which have old logfiles open)');
+            $this->signalAllWorkers(SIGQUIT);
+            $this->logger->log('HUP: new children will inherit new logfiles');
+            $this->maintainWorkerCount();
+            break;
+        case SIGWINCH:
+            if ($this->config->handleWinch) {
+                $this->logger->log('WINCH: gracefully stopping all workers');
+                $this->config->resetQueues();
+                $this->maintainWorkerCount();
+            }
+            break;
+        case SIGQUIT:
+            $this->platform->setQuitOnExitSignal(true);
+            $this->gracefulWorkerShutdownAndWait($signal);
+
+            return true;
+        case SIGINT:
+            $this->gracefulWorkerShutdown($signal);
+
+            return true;
+        case SIGTERM:
+            switch ($this->config->termBehavior) {
+            case "graceful_worker_shutdown_and_wait":
+                $this->gracefulWorkerShutdownAndWait($signal);
+                break;
+            case "graceful_worker_shutdown":
+                $this->gracefulWorkerShutdown($signal);
+                break;
+            default:
+                $this->shutdownEverythingNow($signal);
+                break;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     public function reportWorkerPoolPids()
@@ -49,6 +131,9 @@ class Pool
         }
     }
 
+    /**
+     * Creates or shuts down workers to match the configured worker counts.
+     */
     public function maintainWorkerCount()
     {
         foreach ($this->allKnownQueues() as $queues) {
@@ -64,6 +149,11 @@ class Pool
         }
     }
 
+    /**
+     * Finds and unsets dead workers.
+     *
+     * @param boolean $wait When true waits for all children to shutdown.
+     */
     public function reapAllWorkers($wait = false)
     {
         while ($exited = $this->platform->nextDeadChild($wait)) {
@@ -73,6 +163,9 @@ class Pool
         }
     }
 
+    /**
+     * @return string|null The queues $pid was created to work on
+     */
     public function workerQueues($pid)
     {
         foreach ($this->workers as $queues => $workers) {
@@ -81,9 +174,12 @@ class Pool
             }
         }
 
-        return false;
+        return null;
     }
 
+    /**
+     * @return [integer] The pids of all living worker daemons
+     */
     public function allPids()
     {
         if (!$this->workers) {

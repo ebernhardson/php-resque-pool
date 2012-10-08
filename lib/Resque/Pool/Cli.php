@@ -167,6 +167,8 @@ class Cli
 
     public function startPool(Configuration $config)
     {
-        PoolManager::run($config);
+        $pool = new Pool($config);
+        $pool->start();
+        $pool->join();
     }
 }

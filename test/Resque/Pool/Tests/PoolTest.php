@@ -8,13 +8,6 @@ use Resque\Pool\Pool;
 
 class PoolTest extends BaseTestCase
 {
-    public function testInstantiate()
-    {
-        $config = new Configuration;
-        $pool = new Pool($config);
-        $this->assertSame($config, $pool->getConfiguration());
-    }
-
     public function maintainWorkerCountUpwardsProvider()
     {
         return array(
@@ -43,27 +36,27 @@ class PoolTest extends BaseTestCase
 
     public function testAllKnownQueues()
     {
-        list($pool, $pids) = $this->poolForSpawn(array('foo'=>1,'bar,baz'=>3), false);
+        list($pool, $config, $pids) = $this->poolForSpawn(array('foo'=>1,'bar,baz'=>3), false);
         $this->assertArrayEquals(array('foo','bar,baz'), $pool->allKnownQueues());
-        $pool->getConfiguration()->resetQueues();
+        $config->resetQueues();
         $this->assertEquals(array(), $pool->allKnownQueues());
 
-        list($pool, $pids) = $this->poolForSpawn(array('foo'=>1,'bar,baz'=>3));
+        list($pool, $config, $pids) = $this->poolForSpawn(array('foo'=>1,'bar,baz'=>3));
         $pool->maintainWorkerCount();
         $this->assertArrayEquals(array('foo','bar,baz'), $pool->allKnownQueues());
-        $pool->getConfiguration()->resetQueues();
+        $config->resetQueues();
         // These queues are still known because they haven't been reaped yet
         $this->assertArrayEquals(array('foo','bar,baz'), $pool->allKnownQueues());
     }
 
     public function testWorkerQueues()
     {
-        list($pool, $pids) = $this->poolForSpawn(array('baz'=>1));
-        $this->assertFalse($pool->workerQueues(null));
-        $this->assertFalse($pool->workerQueues(array()));
-        $this->assertFalse($pool->workerQueues('foo'));
+        list($pool, $config, $pids) = $this->poolForSpawn(array('baz'=>1));
+        $this->assertNull($pool->workerQueues(null));
+        $this->assertNull($pool->workerQueues(array()));
+        $this->assertNull($pool->workerQueues('foo'));
 
-        $this->assertFalse($pool->workerQueues(reset($pids)));
+        $this->assertNull($pool->workerQueues(reset($pids)));
         $pool->maintainWorkerCount();
         $this->assertEquals('baz', $pool->workerQueues(reset($pids)));
     }
@@ -109,7 +102,7 @@ class PoolTest extends BaseTestCase
                 ->will(new \PHPUnit_Framework_MockObject_Stub_ConsecutiveCalls($pids));
         }
 
-        return array($pool, $pids); // NOTE: the returned $pids is a copy, not a reference like in the closure
+        return array($pool, $config, $pids); // NOTE: the returned $pids is a copy, not a reference like in the closure
     }
 
     protected function mockPlatform()
