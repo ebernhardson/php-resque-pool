@@ -154,7 +154,7 @@ class Cli
             $config->queueConfigFile = $options['config'];
         }
         if ($options['daemon']) {
-            $config->handleWinch(true);
+            $config->handleWinch = true;
         }
         if ($options['term-graceful-wait']) {
             $config->termBehavior = 'graceful_worker_shutdown_and_wait';
