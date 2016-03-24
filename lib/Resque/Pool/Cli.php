@@ -122,15 +122,13 @@ class Cli
             } else {
                 unlink($pidfile);
             }
-        } elseif (!is_dir($piddir = basename($pidfile))) {
+        } elseif (!is_dir($piddir = dirname($pidfile))) {
             mkdir($piddir, 0777, true);
         }
 
         file_put_contents($pidfile, getmypid(), LOCK_EX);
         register_shutdown_function(function() use ($pidfile) {
-            if (getmypid() === file_get_contents($pidfile)) {
-                unlink($pidfile);
-            }
+            @unlink($pidfile);
         });
     }
 
@@ -144,22 +142,22 @@ class Cli
     public function buildConfiguration(array $options)
     {
         $config = new Configuration;
-        if ($options['appname']) {
+        if (isset($options['appName'])) {
             $config->appName = $options['appName'];
         }
-        if ($options['environment']) {
+        if (isset($options['environment'])) {
             $config->environment = $options['environment'];
         }
-        if ($options['config']) {
+        if (isset($options['config'])) {
             $config->queueConfigFile = $options['config'];
         }
-        if ($options['daemon']) {
+        if (isset($options['daemon'])) {
             $config->handleWinch = true;
         }
-        if ($options['term-graceful-wait']) {
+        if (isset($options['term-graceful-wait'])) {
             $config->termBehavior = 'graceful_worker_shutdown_and_wait';
-        } elseif ($options['term-graceful']) {
-            $config->termBehavior = 'term_graceful';
+        } elseif (isset($options['term-graceful'])) {
+            $config->termBehavior = 'graceful_worker_shutdown';
         }
 
         return $config;
