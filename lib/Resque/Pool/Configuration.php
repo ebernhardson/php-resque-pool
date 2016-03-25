@@ -198,11 +198,12 @@ class Configuration
                 if (preg_match("/\.php/", $this->queueConfigFile)) {
                     ob_start();
                     include($this->queueConfigFile);
-                    $content = ob_get_clean();
-                    $this->queueConfig = \yaml_parse($content);
+                    $this->queueConfig = ob_get_clean();
                 } else {
-                    $this->queueConfig = \yaml_parse_file($this->queueConfigFile);
+                    $this->queueConfig = file_get_contents($this->queueConfigFile);
                 }
+
+                $this->queueConfig = Yaml::parse($this->queueConfig);
             } catch (ParseException $e) {
                 $msg = "Invalid config file: ".$e->getMessage();
                 $this->logger->log($msg);
