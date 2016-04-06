@@ -128,7 +128,9 @@ class Cli
 
         file_put_contents($pidfile, getmypid(), LOCK_EX);
         register_shutdown_function(function() use ($pidfile) {
-            @unlink($pidfile);
+            if (file_exists($pidfile)) {
+                @unlink($pidfile);
+            }
         });
     }
 
