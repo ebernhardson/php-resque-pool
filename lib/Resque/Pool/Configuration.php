@@ -192,11 +192,18 @@ class Configuration
 
     protected function loadQueueConfig()
     {
-        if ($this->queueConfigFile) {
+        if ($this->queueConfigFile && file_exists($this->queueConfigFile)) {
             $this->logger->log("Loading config file: {$this->queueConfigFile}");
-            Yaml::enablePhpParsing();
             try {
-                $this->queueConfig = Yaml::parse($this->queueConfigFile);
+                if (preg_match("/\.php/", $this->queueConfigFile)) {
+                    ob_start();
+                    include($this->queueConfigFile);
+                    $this->queueConfig = ob_get_clean();
+                } else {
+                    $this->queueConfig = file_get_contents($this->queueConfigFile);
+                }
+
+                $this->queueConfig = Yaml::parse($this->queueConfig);
             } catch (ParseException $e) {
                 $msg = "Invalid config file: ".$e->getMessage();
                 $this->logger->log($msg);
