@@ -6,7 +6,8 @@ namespace Resque\Pool;
  * CLI runner for php-resque-pool
  *
  * @package   Resque-Pool
- * @auther    Erik Bernhardson <bernhardsonerik@gmail.com>
+ * @author    Erik Bernhardson <bernhardsonerik@gmail.com>
+ * @author    Michael Kuan <michael34435@gmail.com>
  * @copyright (c) 2012 Erik Bernhardson
  * @license   http://www.opensource.org/licenses/mit-license.php
  */
@@ -15,7 +16,7 @@ class Cli
     private static $optionDefs = array(
         'help' => array('Show usage information', 'default' => false, 'short' => 'h'),
         'config' => array('Alternate path to config file', 'short' => 'c'),
-        'appname' => array('Alternate appname', 'short' => 'a'),
+        'appName' => array('Alternate appname', 'short' => 'a'),
         'daemon' => array('Run as a background daemon', 'default' => false, 'short' => 'd'),
         'pidfile' => array('PID file location', 'short' => 'p'),
         'environment' => array('Set RESQUE_ENV', 'short' => 'E'),
@@ -63,6 +64,7 @@ class Cli
                 unset($received[$key]);
             }
         }
+
         // getopt is odd ... it returns false for received args with no options allowed
         foreach (array_keys($received) as $key) {
             if (false === $received[$key]) {
@@ -90,7 +92,7 @@ class Cli
             $def += array('default' => '', 'short' => false);
             printf(" %2s %-20s %s\n",
                 $def['short'] ? ('-'.$def['short']) : '',
-                "--$name",
+                "--{$name}",
                 $def[0]
             );
         }
@@ -105,7 +107,7 @@ class Cli
         }
         if ($pid) {
             // parent
-            echo "Started background process: $pid\n\n";
+            echo "Started background process: {$pid}\n\n";
             exit(0);
         }
     }
@@ -118,7 +120,7 @@ class Cli
 
         if (file_exists($pidfile)) {
             if ($this->processStillRunning($pidfile)) {
-                throw new \Exception("Pidfile already exists at '$pidfile' and process is still running.");
+                throw new \Exception("Pidfile already exists at '{$pidfile}' and process is still running.");
             } else {
                 unlink($pidfile);
             }

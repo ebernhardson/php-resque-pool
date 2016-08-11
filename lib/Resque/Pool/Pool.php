@@ -6,7 +6,8 @@ namespace Resque\Pool;
  * Worker Pool for php-resque-pool
  *
  * @package   Resque-Pool
- * @auther    Erik Bernhardson <bernhardsonerik@gmail.com>
+ * @author    Erik Bernhardson <bernhardsonerik@gmail.com>
+ * @author    Michael Kuan <michael34435@gmail.com>
  * @copyright (c) 2012 Erik Bernhardson
  * @license   http://www.opensource.org/licenses/mit-license.php
  */
@@ -55,10 +56,12 @@ class Pool
             if ($this->handleSignalQueue()) {
                 break;
             }
+
             if (0 === $this->platform->numSignalsPending()) {
                 $this->maintainWorkerCount();
                 $this->platform->sleep($this->config->sleepTime);
             }
+
             $this->logger->procline(sprintf("managing [%s]", implode(' ', $this->allPids())));
         }
         $this->logger->procline("(shutting down)");
@@ -74,7 +77,7 @@ class Pool
         case SIGUSR1:
         case SIGUSR2:
         case SIGCONT:
-            $this->logger->log("$signal: sending to all workers");
+            $this->logger->log("{$signal}: sending to all workers");
             $this->signalAllWorkers($signal);
             break;
         case SIGHUP:
@@ -158,7 +161,7 @@ class Pool
     {
         while ($exited = $this->platform->nextDeadChild($wait)) {
             list($wpid, $exit) = $exited;
-            $this->logger->log("Reaped resque worker $wpid (status: $exit) queues: ". $this->workerQueues($wpid));
+            $this->logger->log("Reaped resque worker {$wpid} (status: {$exit}) queues: ". $this->workerQueues($wpid));
             $this->deleteWorker($wpid);
         }
     }
@@ -206,20 +209,20 @@ class Pool
 
     public function gracefulWorkerShutdownAndWait($signal)
     {
-        $this->logger->log("$signal: graceful shutdown, waiting for children");
+        $this->logger->log("{$signal}: graceful shutdown, waiting for children");
         $this->signalAllWorkers(SIGQUIT);
         $this->reapAllWorkers(true); // will hang until all workers are shutdown
     }
 
     public function gracefulWorkerShutdown($signal)
     {
-        $this->logger->log("$signal: immediate shutdown (graceful worker shutdown)");
+        $this->logger->log("{$signal}: immediate shutdown (graceful worker shutdown)");
         $this->signalAllWorkers(SIGQUIT);
     }
 
     public function shutdownEverythingNow($signal)
     {
-        $this->logger->log("$signal: $immediate shutdown (and immediate worker shutdown)");
+        $this->logger->log("{$signal}: {$immediate} shutdown (and immediate worker shutdown)");
         $this->signalAllWorkers(SIGTERM);
     }
 
@@ -265,8 +268,8 @@ class Pool
         } elseif ($pid === 0) {
             $this->platform->releaseSignals();
             $worker = $this->createWorker($queues);
-            $this->logger->logWorker("Starting worker $worker");
-            $this->logger->procline("Starting worker $worker");
+            $this->logger->logWorker("Starting worker {$worker}");
+            $this->logger->procline("Starting worker {$worker}");
             $this->callAfterPrefork($worker);
             $worker->work($this->config->workerInterval);
             $this->platform->_exit(0);

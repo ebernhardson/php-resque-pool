@@ -8,7 +8,8 @@ namespace Resque\Pool;
  * tests.
  *
  * @package   Resque-Pool
- * @auther    Erik Bernhardson <bernhardsonerik@gmail.com>
+ * @author    Erik Bernhardson <bernhardsonerik@gmail.com>
+ * @author    Michael Kuan <michael34435@gmail.com>
  * @copyright (c) 2012 Erik Bernhardson
  * @license   http://www.opensource.org/licenses/mit-license.php
  */
@@ -55,6 +56,7 @@ class Platform
         if (!is_array($pids)) {
             $pids = array($pids);
         }
+
         foreach ($pids as $pid) {
             posix_kill($pid, $sig);
         }
@@ -74,6 +76,7 @@ class Platform
         foreach (array_keys($this->trappedSignals) as $sig) {
             pcntl_signal($sig, $noop);
         }
+
         $this->trappedSignals = array();
     }
 
@@ -82,12 +85,13 @@ class Platform
     {
         if (count($this->sigQueue) < self::$SIG_QUEUE_MAX_SIZE) {
             if ($this->quitOnExitSignal && in_array($signal, array(SIGINT, SIGTERM))) {
-                $this->log("Received $signal: short circuiting QUIT waitpid");
+                $this->log("Received {$signal}: short circuiting QUIT waitpid");
                 $this->exit(1); // TODO: should this return a failed exit code?
             }
+
             $this->sigQueue[] = $signal;
         } else {
-            $this->log("Ignoring SIG$signal, queue=" . json_encode($this->sigQueue, true));
+            $this->log("Ignoring SIG{$signal}, queue=" . json_encode($this->sigQueue, true));
         }
     }
 

@@ -9,7 +9,8 @@ use Symfony\Component\Yaml\Yaml,
  * Configuration manager for php-resque-pool
  *
  * @package   Resque-Pool
- * @auther    Erik Bernhardson <bernhardsonerik@gmail.com>
+ * @author    Erik Bernhardson <bernhardsonerik@gmail.com>
+ * @author    Michael Kuan <michael34435@gmail.com>
  * @copyright (c) 2012 Erik Bernhardson
  * @license   http://www.opensource.org/licenses/mit-license.php
  */

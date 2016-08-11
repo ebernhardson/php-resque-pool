@@ -10,7 +10,7 @@ Benefits
 ---------
 
 * Less config - With a simple YAML file, you can start up a pool daemon.
-* Monitoring - If a worker dies for some reason, php-resque-pool will start 
+* Monitoring - If a worker dies for some reason, php-resque-pool will start
   another.
 * Easily change worker distribution - To change your worker counts just update
   the YAML file and send the manager a HUP signal.
@@ -92,7 +92,13 @@ Other Features
 You can specify an alternate config file by setting the `RESQUE_POOL_CONFIG` or
 with the `--config` command line option.
 
+Owner
+------------
+
+@ebernhardson
+
+
 Contributors
 ------------
 
-* Your name here!
+@michael34435
