@@ -23,6 +23,9 @@
     "autoload": {
         "psr-0": { "Resque\\Pool": "lib/" }
     },
+    "bin": [
+        "bin/resque-pool"
+    ],
     "target-dir": "",
     "minimum-stability": "dev"
 }
