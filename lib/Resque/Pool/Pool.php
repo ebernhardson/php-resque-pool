@@ -222,7 +222,7 @@ class Pool
 
     public function shutdownEverythingNow($signal)
     {
-        $this->logger->log("{$signal}: {$immediate} shutdown (and immediate worker shutdown)");
+        $this->logger->log("{$signal}: immediate shutdown (and immediate worker shutdown)");
         $this->signalAllWorkers(SIGTERM);
     }
 

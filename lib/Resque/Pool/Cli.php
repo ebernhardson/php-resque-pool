@@ -42,6 +42,7 @@ class Cli
         $shortopts = '';
         $longopts = array();
         $defaults = array();
+        $shortmap = array();
 
         foreach (self::$optionDefs as $name => $def) {
             $def += array('default' => '', 'short' => false);
