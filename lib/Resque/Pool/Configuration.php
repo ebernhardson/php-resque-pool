@@ -23,19 +23,19 @@ class Configuration
     const DEFAULT_WORKER_INTERVAL = 5;
 
     /**
-     * @param callable
+     * @var callable
      */
     public $afterPreFork;
     /**
      * Tag used in log output
      *
-     * @param string
+     * @var string
      */
     public $appName;
     /**
      * Possible configuration file locations
      *
-     * @param [string]
+     * @var [string]
      */
     public $configFiles = array('resque-pool.yml', 'config/resque-pool.yml');
     /**
@@ -45,48 +45,48 @@ class Configuration
     /**
      * Reset worker counts to 0 when SIGWINCH is received
      *
-     * @param bool
+     * @var bool
      */
     public $handleWinch = false;
     /**
-     * @param Logger
+     * @var Logger
      */
     public $logger;
     /**
-     * @param integer self::LOG_*
+     * @var integer self::LOG_*
      */
     public $logLevel = self::LOG_NONE;
     /**
-     * @param Platform
+     * @var Platform
      */
     public $platform;
     /**
      * Active configuration file location.  When null self::$configFiles will be tried.
      *
-     * @param string|null
+     * @var string|null
      */
     public $queueConfigFile;
     /**
-     * @param integer
+     * @var integer
      */
     public $sleepTime = 60;
     /**
      * What to do when receiving SIGTERM
      *
-     * @param string
+     * @var string
      */
     public $termBehavior = '';
     /**
-     * @param string
+     * @var string
      */
     public $workerClass = '\\Resque_Worker';
     /**
-     * @param integer
+     * @var integer
      */
     public $workerInterval = self::DEFAULT_WORKER_INTERVAL;
 
     /**
-     * @param [string => integer]
+     * @var array<string,int>
      */
     protected $queueConfig;
 
@@ -137,7 +137,7 @@ class Configuration
     }
 
     /**
-     * @return [string] All configured queue combinations
+     * @return string[] All configured queue combinations
      */
     public function knownQueues()
     {
@@ -145,7 +145,7 @@ class Configuration
     }
 
     /**
-     * @return [string => integer] Map of queue combination to desired worker count
+     * @return array<string,int> Map of queue combination to desired worker count
      */
     public function queueConfig()
     {
@@ -209,7 +209,7 @@ class Configuration
                 $msg = "Invalid config file: ".$e->getMessage();
                 $this->logger->log($msg);
 
-                throw new RuntimeException($msg, 0, $e);
+                throw new \RuntimeException($msg, 0, $e);
             }
         }
         if (!$this->queueConfig) {

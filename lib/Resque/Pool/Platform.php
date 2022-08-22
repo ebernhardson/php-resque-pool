@@ -17,12 +17,14 @@ class Platform
 {
     private static $SIG_QUEUE_MAX_SIZE = 5;
 
-    // @param Logger
+    /** @var Logger */
     protected $logger;
-    // @param bool
+    /** @var bool */
     private $quitOnExitSignal;
 
+    /** @var list<int> */
     private $sigQueue = array();
+    /** @var list<int> */
     private $trappedSignals = array();
 
     public function setLogger(Logger $logger = null)

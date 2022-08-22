@@ -13,6 +13,7 @@ namespace Resque\Pool;
  */
 class Logger
 {
+    /** @var string */
     private $appName;
 
     public function __construct($appName = null)

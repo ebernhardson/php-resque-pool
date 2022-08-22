@@ -16,17 +16,17 @@ class Pool
     private static $QUEUE_SIGS = array(SIGQUIT, SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGCONT, SIGHUP, SIGWINCH, SIGCHLD);
 
     /**
-     * @param Configuration
+     * @var Configuration
      */
     private $config;
 
     /**
-     * @param Logger
+     * @var Logger
      */
     private $logger;
 
     /**
-     * @param [queues => [pid => true]]
+     * @var array<string,array<int,true>>
      */
     private $workers = array();
 
