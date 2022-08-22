@@ -16,11 +16,18 @@ class Logger
     /** @var string */
     private $appName;
 
+    /**
+     * @param null|string $appName
+     */
     public function __construct($appName = null)
     {
         $this->appName = $appName ? "[{$appName}]" : "";
     }
 
+    /**
+     * @param string $string
+     * @return void
+     */
     public function procline($string)
     {
         if (function_exists('setproctitle')) {
@@ -30,12 +37,20 @@ class Logger
         }
     }
 
+    /**
+     * @param string $message
+     * @return void
+     */
     public function log($message)
     {
         $pid = getmypid();
         echo "resque-pool-manager{$this->appName}[{$pid}]: {$message}\n";
     }
 
+    /**
+     * @param string $message
+     * @return void
+     */
     public function logWorker($message)
     {
         $pid = getmypid();
@@ -44,6 +59,7 @@ class Logger
 
     /**
      * This function closes and re-opens the output log
+     * @return void
      */
     public function rotate()
     {

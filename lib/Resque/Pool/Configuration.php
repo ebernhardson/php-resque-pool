@@ -23,23 +23,24 @@ class Configuration
     const DEFAULT_WORKER_INTERVAL = 5;
 
     /**
-     * @var callable
+     * @var null|callable
      */
     public $afterPreFork;
     /**
      * Tag used in log output
      *
-     * @var string
+     * @var null|string
      */
     public $appName;
     /**
      * Possible configuration file locations
      *
-     * @var [string]
+     * @var string[]
      */
     public $configFiles = array('resque-pool.yml', 'config/resque-pool.yml');
     /**
      * Environment to use from configuration
+     * @var string
      */
     public $environment = 'dev';
     /**
@@ -91,7 +92,7 @@ class Configuration
     protected $queueConfig;
 
     /**
-     * @param array|string|null $config   Either a configuration array, path to yml
+     * @param array<string,int>|string|null $config   Either a configuration array, path to yml
      *                                    file containing config, or null
      * @param Logger|null       $logger   If not provided one will be instantiated
      * @param Platform|null     $platform If not provided one will be instantiated
@@ -107,11 +108,12 @@ class Configuration
             $this->queueConfigFile = null;
         } elseif (is_string($config)) {
             $this->queueConfigFile  = $config;
-        } elseif ($config !== null) {
+        } elseif ($config !== null) { // @phpstan-ignore-line
             throw new \InvalidArgumentException('Unknown $config argument passed');
         }
     }
 
+    /** @return void */
     public function initialize()
     {
         if (!$this->queueConfig) {
@@ -119,7 +121,7 @@ class Configuration
             $this->loadQueueConfig();
         }
         if ($this->environment && isset($this->queueConfig[$this->environment])) {
-            $this->queueConfig = $this->queueConfig[$this->environment] + $this->queueConfig;
+            $this->queueConfig = $this->queueConfig[$this->environment] + $this->queueConfig; // @phpstan-ignore-line
         }
         // filter out the environments
         $this->queueConfig = array_filter($this->queueConfig, 'is_integer');
@@ -154,18 +156,22 @@ class Configuration
 
     /**
      * Resets the current queue configuration
+     * @return void
      */
     public function resetQueues()
     {
         $this->queueConfig = array();
     }
 
+    /**
+     * @return void
+     */
     protected function loadEnvironment()
     {
-        $this->appName = basename(getcwd());
-        $this->environment = getenv('RESQUE_ENV');
-        $this->workerInterval = getenv('INTERVAL') ?: $this->workerInterval;
-        $this->queueConfigFile = getenv('RESQUE_POOL_CONFIG');
+        $this->appName = basename(getcwd() ?: '.');
+        $this->environment = (string)getenv('RESQUE_ENV');
+        $this->workerInterval = (int)getenv('INTERVAL') ?: $this->workerInterval;
+        $this->queueConfigFile = (string)getenv('RESQUE_POOL_CONFIG');
 
         if (getenv('VVERBOSE')) {
             $this->logLevel = self::LOG_VERBOSE;
@@ -174,6 +180,9 @@ class Configuration
         }
     }
 
+    /**
+     * @return void
+     */
     protected function chooseConfigFile()
     {
         if ($this->queueConfigFile) {
@@ -191,6 +200,9 @@ class Configuration
         }
     }
 
+    /**
+     * @return void
+     */
     protected function loadQueueConfig()
     {
         if ($this->queueConfigFile && file_exists($this->queueConfigFile)) {
@@ -199,12 +211,12 @@ class Configuration
                 if (preg_match("/\.php/", $this->queueConfigFile)) {
                     ob_start();
                     include($this->queueConfigFile);
-                    $this->queueConfig = ob_get_clean();
+                    $queueConfig = (string)ob_get_clean();
                 } else {
-                    $this->queueConfig = file_get_contents($this->queueConfigFile);
+                    $queueConfig = (string)file_get_contents($this->queueConfigFile);
                 }
 
-                $this->queueConfig = Yaml::parse($this->queueConfig);
+                $this->queueConfig = Yaml::parse($queueConfig);
             } catch (ParseException $e) {
                 $msg = "Invalid config file: ".$e->getMessage();
                 $this->logger->log($msg);

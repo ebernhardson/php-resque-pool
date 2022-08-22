@@ -20,6 +20,9 @@
         "symfony/yaml": "~2.1|~3.0|~4.0|~5.0",
         "resque/php-resque": "~1.3"
     },
+    "require-dev": {
+        "phpstan/phpstan": "~1.8"
+    },
     "autoload": {
         "psr-0": { "Resque\\Pool": "lib/" }
     },
@@ -27,5 +30,8 @@
         "bin/resque-pool"
     ],
     "target-dir": "",
-    "minimum-stability": "dev"
+    "minimum-stability": "dev",
+    "scripts": {
+        "phpstan": "phpstan analyse --memory-limit=2G"
+    }
 }
