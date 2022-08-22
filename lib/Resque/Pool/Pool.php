@@ -24,6 +24,10 @@ class Pool
      * @var Logger
      */
     private $logger;
+    /**
+     * @var Platform
+     */
+    private $platform;
 
     /**
      * @var array<string,array<int,true>>
@@ -264,7 +268,7 @@ class Pool
         $pid = $this->platform->pcntl_fork();
         if ($pid === -1) {
             $this->logger->log('pcntl_fork failed');
-            $this->platform->exit(1);
+            $this->platform->_exit(1);
         } elseif ($pid === 0) {
             $this->platform->releaseSignals();
             $worker = $this->createWorker($queues);
