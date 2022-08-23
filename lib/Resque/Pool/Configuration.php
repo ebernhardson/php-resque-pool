@@ -216,7 +216,7 @@ class Configuration
                     $queueConfig = (string)file_get_contents($this->queueConfigFile);
                 }
 
-                $this->queueConfig = Yaml::parse($queueConfig);
+                $this->queueConfig = Yaml::parse($queueConfig); // @phpstan-ignore-line
             } catch (ParseException $e) {
                 $msg = "Invalid config file: ".$e->getMessage();
                 $this->logger->log($msg);
