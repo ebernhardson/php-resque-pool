@@ -23,75 +23,76 @@ class Configuration
     const DEFAULT_WORKER_INTERVAL = 5;
 
     /**
-     * @param callable
+     * @var null|callable
      */
     public $afterPreFork;
     /**
      * Tag used in log output
      *
-     * @param string
+     * @var null|string
      */
     public $appName;
     /**
      * Possible configuration file locations
      *
-     * @param [string]
+     * @var string[]
      */
     public $configFiles = array('resque-pool.yml', 'config/resque-pool.yml');
     /**
      * Environment to use from configuration
+     * @var string
      */
     public $environment = 'dev';
     /**
      * Reset worker counts to 0 when SIGWINCH is received
      *
-     * @param bool
+     * @var bool
      */
     public $handleWinch = false;
     /**
-     * @param Logger
+     * @var Logger
      */
     public $logger;
     /**
-     * @param integer self::LOG_*
+     * @var integer self::LOG_*
      */
     public $logLevel = self::LOG_NONE;
     /**
-     * @param Platform
+     * @var Platform
      */
     public $platform;
     /**
      * Active configuration file location.  When null self::$configFiles will be tried.
      *
-     * @param string|null
+     * @var string|null
      */
     public $queueConfigFile;
     /**
-     * @param integer
+     * @var integer
      */
     public $sleepTime = 60;
     /**
      * What to do when receiving SIGTERM
      *
-     * @param string
+     * @var string
      */
     public $termBehavior = '';
     /**
-     * @param string
+     * @var string
      */
     public $workerClass = '\\Resque_Worker';
     /**
-     * @param integer
+     * @var integer
      */
     public $workerInterval = self::DEFAULT_WORKER_INTERVAL;
 
     /**
-     * @param [string => integer]
+     * @var array<string,int>
      */
     protected $queueConfig;
 
     /**
-     * @param array|string|null $config   Either a configuration array, path to yml
+     * @param array<string,int>|string|null $config   Either a configuration array, path to yml
      *                                    file containing config, or null
      * @param Logger|null       $logger   If not provided one will be instantiated
      * @param Platform|null     $platform If not provided one will be instantiated
@@ -107,11 +108,12 @@ class Configuration
             $this->queueConfigFile = null;
         } elseif (is_string($config)) {
             $this->queueConfigFile  = $config;
-        } elseif ($config !== null) {
+        } elseif ($config !== null) { // @phpstan-ignore-line
             throw new \InvalidArgumentException('Unknown $config argument passed');
         }
     }
 
+    /** @return void */
     public function initialize()
     {
         if (!$this->queueConfig) {
@@ -119,7 +121,7 @@ class Configuration
             $this->loadQueueConfig();
         }
         if ($this->environment && isset($this->queueConfig[$this->environment])) {
-            $this->queueConfig = $this->queueConfig[$this->environment] + $this->queueConfig;
+            $this->queueConfig = $this->queueConfig[$this->environment] + $this->queueConfig; // @phpstan-ignore-line
         }
         // filter out the environments
         $this->queueConfig = array_filter($this->queueConfig, 'is_integer');
@@ -137,7 +139,7 @@ class Configuration
     }
 
     /**
-     * @return [string] All configured queue combinations
+     * @return string[] All configured queue combinations
      */
     public function knownQueues()
     {
@@ -145,7 +147,7 @@ class Configuration
     }
 
     /**
-     * @return [string => integer] Map of queue combination to desired worker count
+     * @return array<string,int> Map of queue combination to desired worker count
      */
     public function queueConfig()
     {
@@ -154,18 +156,22 @@ class Configuration
 
     /**
      * Resets the current queue configuration
+     * @return void
      */
     public function resetQueues()
     {
         $this->queueConfig = array();
     }
 
+    /**
+     * @return void
+     */
     protected function loadEnvironment()
     {
-        $this->appName = basename(getcwd());
-        $this->environment = getenv('RESQUE_ENV');
-        $this->workerInterval = getenv('INTERVAL') ?: $this->workerInterval;
-        $this->queueConfigFile = getenv('RESQUE_POOL_CONFIG');
+        $this->appName = basename(getcwd() ?: '.');
+        $this->environment = (string)getenv('RESQUE_ENV');
+        $this->workerInterval = (int)getenv('INTERVAL') ?: $this->workerInterval;
+        $this->queueConfigFile = (string)getenv('RESQUE_POOL_CONFIG');
 
         if (getenv('VVERBOSE')) {
             $this->logLevel = self::LOG_VERBOSE;
@@ -174,6 +180,9 @@ class Configuration
         }
     }
 
+    /**
+     * @return void
+     */
     protected function chooseConfigFile()
     {
         if ($this->queueConfigFile) {
@@ -191,6 +200,9 @@ class Configuration
         }
     }
 
+    /**
+     * @return void
+     */
     protected function loadQueueConfig()
     {
         if ($this->queueConfigFile && file_exists($this->queueConfigFile)) {
@@ -199,17 +211,17 @@ class Configuration
                 if (preg_match("/\.php/", $this->queueConfigFile)) {
                     ob_start();
                     include($this->queueConfigFile);
-                    $this->queueConfig = ob_get_clean();
+                    $queueConfig = (string)ob_get_clean();
                 } else {
-                    $this->queueConfig = file_get_contents($this->queueConfigFile);
+                    $queueConfig = (string)file_get_contents($this->queueConfigFile);
                 }
 
-                $this->queueConfig = Yaml::parse($this->queueConfig);
+                $this->queueConfig = Yaml::parse($queueConfig); // @phpstan-ignore-line
             } catch (ParseException $e) {
                 $msg = "Invalid config file: ".$e->getMessage();
                 $this->logger->log($msg);
 
-                throw new RuntimeException($msg, 0, $e);
+                throw new \RuntimeException($msg, 0, $e);
             }
         }
         if (!$this->queueConfig) {

@@ -13,20 +13,27 @@ namespace Resque\Pool;
  */
 class Pool
 {
+    /**
+     * @var list<int>
+     */
     private static $QUEUE_SIGS = array(SIGQUIT, SIGINT, SIGTERM, SIGUSR1, SIGUSR2, SIGCONT, SIGHUP, SIGWINCH, SIGCHLD);
 
     /**
-     * @param Configuration
+     * @var Configuration
      */
     private $config;
 
     /**
-     * @param Logger
+     * @var Logger
      */
     private $logger;
+    /**
+     * @var Platform
+     */
+    private $platform;
 
     /**
-     * @param [queues => [pid => true]]
+     * @var array<string,array<int,true>>
      */
     private $workers = array();
 
@@ -37,6 +44,9 @@ class Pool
         $this->platform = $config->platform;
     }
 
+    /**
+     * @return void
+     */
     public function start()
     {
         $this->config->initialize();
@@ -49,6 +59,9 @@ class Pool
         $this->reportWorkerPoolPids();
     }
 
+    /**
+     * @return void
+     */
     public function join()
     {
         while (true) {
@@ -74,6 +87,8 @@ class Pool
     protected function handleSignalQueue()
     {
         switch ($signal = $this->platform->nextSignal()) {
+        case null:
+            break;
         case SIGUSR1:
         case SIGUSR2:
         case SIGCONT:
@@ -124,6 +139,9 @@ class Pool
         return false;
     }
 
+    /**
+     * @return void
+     */
     public function reportWorkerPoolPids()
     {
         if (count($this->workers) === 0) {
@@ -136,6 +154,7 @@ class Pool
 
     /**
      * Creates or shuts down workers to match the configured worker counts.
+     * @return void
      */
     public function maintainWorkerCount()
     {
@@ -156,6 +175,7 @@ class Pool
      * Finds and unsets dead workers.
      *
      * @param boolean $wait When true waits for all children to shutdown.
+     * @return void
      */
     public function reapAllWorkers($wait = false)
     {
@@ -167,6 +187,7 @@ class Pool
     }
 
     /**
+     * @param int $pid
      * @return string|null The queues $pid was created to work on
      */
     public function workerQueues($pid)
@@ -181,7 +202,7 @@ class Pool
     }
 
     /**
-     * @return [integer] The pids of all living worker daemons
+     * @return list<int> The pids of all living worker daemons
      */
     public function allPids()
     {
@@ -194,19 +215,30 @@ class Pool
             $result[] = array_keys($queues);
         }
 
-        return call_user_func_array('array_merge', $result);
+        return call_user_func_array('array_merge', $result); // @phpstan-ignore-line
     }
 
+    /**
+     * @return list<string>
+     */
     public function allKnownQueues()
     {
         return array_unique(array_merge($this->config->knownQueues(), array_keys($this->workers)));
     }
 
+    /**
+     * @param int $signal
+     * @return void
+     */
     public function signalAllWorkers($signal)
     {
         $this->platform->signalPids($this->allPids(), $signal);
     }
 
+    /**
+     * @param int $signal
+     * @return void
+     */
     public function gracefulWorkerShutdownAndWait($signal)
     {
         $this->logger->log("{$signal}: graceful shutdown, waiting for children");
@@ -214,18 +246,30 @@ class Pool
         $this->reapAllWorkers(true); // will hang until all workers are shutdown
     }
 
+    /**
+     * @param int $signal
+     * @return void
+     */
     public function gracefulWorkerShutdown($signal)
     {
         $this->logger->log("{$signal}: immediate shutdown (graceful worker shutdown)");
         $this->signalAllWorkers(SIGQUIT);
     }
 
+    /**
+     * @param int $signal
+     * @return void
+     */
     public function shutdownEverythingNow($signal)
     {
-        $this->logger->log("{$signal}: {$immediate} shutdown (and immediate worker shutdown)");
+        $this->logger->log("{$signal}: immediate shutdown (and immediate worker shutdown)");
         $this->signalAllWorkers(SIGTERM);
     }
 
+    /**
+     * @param string $queues
+     * @return int
+     */
     protected function workerDeltaFor($queues)
     {
         $max = $this->config->workerCount($queues);
@@ -234,11 +278,19 @@ class Pool
         return $max - $active;
     }
 
+    /**
+     * @param string $queues
+     * @return int[]
+     */
     protected function pidsFor($queues)
     {
         return isset($this->workers[$queues]) ? array_keys($this->workers[$queues]) : array();
     }
 
+    /**
+     * @param int $pid
+     * @return void
+     */
     protected function deleteWorker($pid)
     {
         foreach (array_keys($this->workers) as $queues) {
@@ -258,26 +310,32 @@ class Pool
      *       code pre-fork so that the copy-on-write functionality of the linux memory model
      *       can share the compiled code between workers.  Some investigation into the facts
      *       would be usefull
+     * @param string $queues
+     * @return void
      */
     protected function spawnWorker($queues)
     {
         $pid = $this->platform->pcntl_fork();
         if ($pid === -1) {
             $this->logger->log('pcntl_fork failed');
-            $this->platform->exit(1);
+            $this->platform->_exit(1);
         } elseif ($pid === 0) {
             $this->platform->releaseSignals();
             $worker = $this->createWorker($queues);
             $this->logger->logWorker("Starting worker {$worker}");
             $this->logger->procline("Starting worker {$worker}");
             $this->callAfterPrefork($worker);
-            $worker->work($this->config->workerInterval);
+            $worker->work($this->config->workerInterval); // @phpstan-ignore-line
             $this->platform->_exit(0);
         } else {
             $this->workers[$queues][$pid] = true;
         }
     }
 
+    /**
+     * @param object $worker
+     * @return void
+     */
     protected function callAfterPrefork($worker)
     {
         if ($callable = $this->config->afterPreFork) {
@@ -285,15 +343,19 @@ class Pool
         }
     }
 
+    /**
+     * @param string $queues
+     * @return object
+     */
     protected function createWorker($queues)
     {
         $queues = explode(',', $queues);
         $class = $this->config->workerClass;
         $worker = new $class($queues);
         if ($this->config->logLevel === Configuration::LOG_VERBOSE) {
-            $worker->logLevel = \Resque_Worker::LOG_VERBOSE;
+            $worker->logLevel = \Resque_Worker::LOG_VERBOSE; // @phpstan-ignore-line
         } elseif ($this->config->logLevel === Configuration::LOG_NORMAL) {
-            $worker->logLevel = \Resque_Worker::LOG_NORMAL;
+            $worker->logLevel = \Resque_Worker::LOG_NORMAL; // @phpstan-ignore-line
         }
 
         return $worker;

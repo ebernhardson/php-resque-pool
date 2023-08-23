@@ -13,6 +13,10 @@ namespace Resque\Pool;
  */
 class Cli
 {
+
+    /**
+     * @var array<string,array<array-key,string|bool>>
+     */
     private static $optionDefs = array(
         'help' => array('Show usage information', 'default' => false, 'short' => 'h'),
         'config' => array('Alternate path to config file', 'short' => 'c'),
@@ -25,6 +29,9 @@ class Cli
         'term_immediate' => array('On TERM signal, shut down workers immediately (default)'),
     );
 
+    /**
+     * @return void
+     */
     public function run()
     {
         $opts = $this->parseOptions();
@@ -37,11 +44,20 @@ class Cli
         $this->startPool($config);
     }
 
+    /**
+     * @return array<string,mixed>
+     * @phpstan-return array{
+     *   help: bool, config: string, appName: string, daemon: bool, pidfile: string,
+     *   environment: string, term-graceful-wait: string, term-graceful: string, term_immediate: string
+     * }
+     */
     public function parseOptions()
     {
         $shortopts = '';
         $longopts = array();
+        /** @var array<string,string|bool> $defaults */
         $defaults = array();
+        $shortmap = array();
 
         foreach (self::$optionDefs as $name => $def) {
             $def += array('default' => '', 'short' => false);
@@ -56,6 +72,7 @@ class Cli
             }
         }
 
+        /** @var array<string,string|bool> $received */
         $received = getopt($shortopts, $longopts);
 
         foreach (array_keys($received) as $key) {
@@ -71,6 +88,7 @@ class Cli
                 $received[$key] = true;
             }
         }
+
         $received += $defaults;
 
         if ($received['help']) {
@@ -78,9 +96,12 @@ class Cli
             exit(0);
         }
 
-        return $received;
+        return $received; // @phpstan-ignore-line
     }
 
+    /**
+     * @return void
+     */
     public function usage()
     {
         $cmdname = isset($GLOBALS['argv'][0]) ? $GLOBALS['argv'][0] : 'resque-pool';
@@ -99,6 +120,9 @@ class Cli
         echo "\n\n";
     }
 
+    /**
+     * @return void
+     */
     public function daemonize()
     {
         $pid = pcntl_fork();
@@ -112,6 +136,10 @@ class Cli
         }
     }
 
+    /**
+     * @param string $pidfile
+     * @return void
+     */
     public function managePidfile($pidfile)
     {
         if (!$pidfile) {
@@ -136,13 +164,30 @@ class Cli
         });
     }
 
+    /**
+     * @param string $pidfile
+     * @return bool
+     */
     public function processStillRunning($pidfile)
     {
-        $oldPid = trim(file_get_contents($pidfile));
+        $contents = file_get_contents($pidfile);
+        if (false === $contents) {
+            return true;
+        }
+
+        $oldPid = (int)trim($contents);
 
         return posix_kill($oldPid, 0);
     }
 
+    /**
+     * @param array $options
+     * @phpstan-param array{
+     *   appName?: string, environment?: string, config?: string, daemon?: bool,
+     *   term-graceful-wait?: string, term-graceful?: string
+     * } $options
+     * @return Configuration
+     */
     public function buildConfiguration(array $options)
     {
         $config = new Configuration;
@@ -167,6 +212,9 @@ class Cli
         return $config;
     }
 
+    /**
+     * @return void
+     */
     public function startPool(Configuration $config)
     {
         $pool = new Pool($config);
